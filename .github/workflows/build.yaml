@@ -1,0 +1,81 @@
+name: crproxy
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "release-*"
+
+jobs:
+  release:
+    name: release publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 'stable'
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - name: Set tag vars
+        run: echo "GIT_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: go build
+        run: make build && ls -l bin
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/crproxy
+          asset_name: crproxy-${{ env.GIT_TAG }}-linux-amd64
+          asset_content_type: application/octet-stream
+
+  dockerhub:
+    name: build and push to dockerhub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Set tag vars
+        run: echo "GIT_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          file: Dockerfile
+          provenance: false
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:${{ env.GIT_TAG }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:${{ github.sha }}
