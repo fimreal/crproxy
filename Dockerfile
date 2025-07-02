@@ -1,12 +1,10 @@
-FROM golang:latest as builder
+FROM golang:latest AS builder
 COPY . /srv/crproxy
 # ENV GOPROXY="https://goproxy.cn,direct"
-RUN cd /srv/crproxy &&\
-    make docker-build &&\
-    ls -l bin
+RUN cd /srv/crproxy && make build && ls -l bin
 
 # download ca-certificates
-FROM alpine:latest as ca
+FROM alpine:latest AS ca
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk --no-cache add ca-certificates
 

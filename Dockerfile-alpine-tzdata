@@ -1,9 +1,7 @@
-FROM golang:latest as builder
+FROM golang:latest AS builder
 COPY . /srv/crproxy
 # ENV GOPROXY="https://goproxy.cn,direct"
-RUN cd /srv/crproxy &&\
-    make docker-build &&\
-    ls -l bin
+RUN cd /srv/crproxy && make build && ls -l bin
 
 #
 FROM alpine:latest
