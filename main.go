@@ -236,13 +236,23 @@ func copyResponse(c *gin.Context, resp *http.Response) {
 	io.Copy(c.Writer, resp.Body)
 }
 
+var version = "unknown"
+var buildTime = ""
+
 func main() {
 	var port string
 	var debug bool
+	var showVersion bool
 
 	flag.StringVar(&port, "port", os.Getenv("PORT"), "listen port")
 	flag.BoolVar(&debug, "debug", false, "debug mode")
+	flag.BoolVar(&showVersion, "version", false, "show version and exit")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("crproxy version: %s\nbuild time: %s\n", version, buildTime)
+		return
+	}
 
 	if port == "" {
 		port = "5000"

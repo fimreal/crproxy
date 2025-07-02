@@ -1,0 +1,18 @@
+FROM golang:latest as builder
+COPY . /srv/crproxy
+# ENV GOPROXY="https://goproxy.cn,direct"
+RUN cd /srv/crproxy &&\
+    make docker-build &&\
+    ls -l bin
+
+#
+FROM alpine:latest
+LABEL source.url="https://github.com/fimreal/crproxy"
+# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+RUN apk add --no-cache tzdata ca-certificates &&\
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime &&\
+    echo "Asia/Shanghai" > /etc/timezone
+
+COPY --from=builder /srv/crproxy/bin/crproxy /crproxy
+
+ENTRYPOINT [ "/crproxy" ]
