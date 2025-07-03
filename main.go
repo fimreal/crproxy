@@ -16,7 +16,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// tokenCacheEntry 用于缓存 token 及其过期时间
+var version = "unknown"
+var buildTime = ""
+
+// tokenCacheEntry is used to cache token and its expiration time
 var tokenCache sync.Map // key: service|scope, value: tokenCacheEntry
 
 type tokenCacheEntry struct {
@@ -26,66 +29,123 @@ type tokenCacheEntry struct {
 
 // handleProxyRequest handles all /v2/* requests and proxies them to the appropriate upstream registry.
 func handleProxyRequest(c *gin.Context) {
-	path := c.Request.URL.Path
-
-	// Docker registry API requires /v2/ to return 200 OK for health check
-	if path == "/v2/" || path == "/v2" {
+	// Health check for /v2 and /v2/
+	if c.Request.URL.Path == "/v2" || c.Request.URL.Path == "/v2/" {
 		c.Status(http.StatusOK)
 		return
 	}
 
-	// Parse /v2/{prefix}/...
-	parts := strings.SplitN(strings.TrimPrefix(path, "/v2/"), "/", 2)
-	if len(parts) < 1 || parts[0] == "" {
-		c.JSON(http.StatusNotFound, gin.H{"message": "error: not found"})
+	path := c.Request.URL.Path
+	ezap.Debugf("Request Got: client=%s path=%s", c.ClientIP(), path)
+
+	// Parse /v2/{prefix}/{repoPath}
+	trimmed := strings.TrimPrefix(path, "/v2/")
+	splitIdx := strings.Index(trimmed, "/")
+	if splitIdx == -1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "invalid path: missing image name after /v2/",
+			"path":    path,
+		})
 		return
 	}
-	prefix := parts[0]
+	registry := trimmed[:splitIdx]
+	repoPath := trimmed[splitIdx+1:]
+	if registry == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message":  "invalid path: missing registry prefix after /v2/",
+			"path":     path,
+			"registry": "",
+		})
+		return
+	}
 
 	// Special case for docker.io
-	upstream := "https://" + prefix
-	if prefix == "docker.io" {
+	upstream := "https://" + registry
+	if registry == "docker.io" {
 		upstream = "https://registry-1.docker.io"
-		// auto add library/ if not present
-		if len(parts) > 1 && (parts[1] == "" || !strings.HasPrefix(parts[1], "library/")) {
-			parts[1] = "library/" + parts[1]
+		// Accurately extract repo name by finding the last resource keyword
+		resourceKeywords := []string{"/manifests/", "/blobs/", "/tags/", "/uploads/", "/mount/"}
+		repoName := repoPath
+		maxIdx := -1
+		for _, kw := range resourceKeywords {
+			if idx := strings.LastIndex(repoPath, kw); idx != -1 && idx > maxIdx {
+				maxIdx = idx
+			}
+		}
+		if maxIdx != -1 {
+			repoName = repoPath[:maxIdx]
+		}
+		// Only add 'library/' if repoName is single-segment
+		if !strings.Contains(repoName, "/") {
+			ezap.Info("repoPath: ", repoName)
+			repoPath = "library/" + repoPath
 		}
 	}
 
-	rest := ""
-	if len(parts) == 2 {
-		rest = parts[1]
-	}
-
 	// Build upstream URL
-	newURL := upstream + "/v2/" + rest
+	newURL := upstream + "/v2/" + repoPath
 	if c.Request.URL.RawQuery != "" {
 		newURL += "?" + c.Request.URL.RawQuery
 	}
 
-	// info 日志：只保留这条
-	ezap.Infof("Proxy image: client=%s method=%s path=%s upstream=%s", c.ClientIP(), c.Request.Method, path, newURL)
-
-	// 如果是 blob 下载，额外输出一条 info 日志
 	if strings.Contains(path, "/blobs/") {
 		digest := ""
-		idx := strings.Index(path, "/blobs/")
-		if idx != -1 {
-			digest = path[idx+len("/blobs/"):]
+		if parts := strings.SplitN(path, "/blobs/", 2); len(parts) == 2 {
+			digest = parts[1]
 		}
-		ezap.Infof("Proxy blob: client=%s repo=%s digest=%s upstream=%s", c.ClientIP(), prefix, digest, newURL)
+		ezap.Infof("Proxy blob: client=%s registry=%s repoPath=%s digest=%s", c.ClientIP(), registry, repoPath, digest)
+	} else {
+		ezap.Infof("Proxy image: client=%s method=%s registry=%s repoPath=%s", c.ClientIP(), c.Request.Method, registry, repoPath)
 	}
 
-	resp, err := forwardWithAuthRetry(newURL, c.Request)
+	var resp *http.Response
+	var err error
+
+	isBlobRequest := strings.Contains(path, "/blobs/")
+	if isBlobRequest {
+		// Try to use token cache for blob requests to avoid an extra 401 round-trip.
+		service := registry
+		scope := "repository:" + repoPath[:strings.Index(repoPath, "/")] + ":pull"
+		// Support multi-level repo path
+		if slashIdx := strings.LastIndex(repoPath, "/"); slashIdx != -1 {
+			scope = "repository:" + repoPath[:slashIdx] + ":pull"
+		}
+		cacheKey := service + "|" + scope
+		if v, ok := tokenCache.Load(cacheKey); ok {
+			entry := v.(tokenCacheEntry)
+			if entry.expireTime.After(time.Now().Add(10 * time.Second)) {
+				// Cache hit, send request with Bearer token
+				req, _ := http.NewRequest(c.Request.Method, newURL, c.Request.Body)
+				for key, values := range c.Request.Header {
+					for _, value := range values {
+						req.Header.Add(key, value)
+					}
+				}
+				req.Host = req.URL.Host
+				req.Header.Set("Authorization", "Bearer "+entry.token)
+				resp, err = http.DefaultClient.Do(req)
+				// If token is expired/invalid, fallback to normal auth flow
+				if err != nil || (resp != nil && (resp.StatusCode == 401 || resp.StatusCode == 403)) {
+					if resp != nil {
+						resp.Body.Close()
+					}
+					resp = nil
+				}
+			}
+		}
+	}
+	if resp == nil {
+		resp, err = forwardWithAuthRetry(newURL, c.Request)
+	}
 	if err != nil {
 		ezap.Errorf("Proxy error: %v", err)
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Always close the upstream response body to avoid resource leaks.
 	defer resp.Body.Close()
 
-	// debug 日志：只保留关键流程
-	ezap.Debugf("Upstream response: %d %s", resp.StatusCode, resp.Status)
+	ezap.Debugf("Upstream response: %s", resp.Status)
 
 	copyResponse(c, resp)
 }
@@ -97,6 +157,7 @@ func forwardWithAuthRetry(url string, originalReq *http.Request) (*http.Response
 	if err != nil {
 		return nil, err
 	}
+
 	for key, values := range originalReq.Header {
 		for _, value := range values {
 			req.Header.Add(key, value)
@@ -109,6 +170,7 @@ func forwardWithAuthRetry(url string, originalReq *http.Request) (*http.Response
 		return nil, err
 	}
 
+	// (need comment)
 	if resp.StatusCode == http.StatusUnauthorized {
 		authHeader := resp.Header.Get("Www-Authenticate")
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
@@ -235,9 +297,6 @@ func copyResponse(c *gin.Context, resp *http.Response) {
 	c.Status(resp.StatusCode)
 	io.Copy(c.Writer, resp.Body)
 }
-
-var version = "unknown"
-var buildTime = ""
 
 func main() {
 	var port string
