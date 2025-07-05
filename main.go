@@ -324,6 +324,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
+	r.Use(gin.Recovery())
 
 	r.Any("/v2/*path", handleProxyRequest)
 
@@ -333,5 +334,5 @@ func main() {
 			ezap.Infof("%s=%s", key, v)
 		}
 	}
-	ezap.Error(r.Run(":" + port))
+	ezap.Fatal(r.Run(":" + port))
 }
