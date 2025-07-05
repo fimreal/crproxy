@@ -82,6 +82,16 @@ func handleProxyRequest(c *gin.Context) {
 		}
 	}
 
+	// Validate upstream URL
+	if _, err := url.Parse(upstream); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message":  "invalid registry domain",
+			"path":     path,
+			"registry": registry,
+		})
+		return
+	}
+
 	// Build upstream URL
 	newURL := upstream + "/v2/" + repoPath
 	if c.Request.URL.RawQuery != "" {
