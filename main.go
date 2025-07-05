@@ -19,6 +19,12 @@ import (
 var version = "unknown"
 var buildTime = ""
 
+// Constants for registry operations
+const (
+	defaultExpirationTime = 300 * time.Second // 5 minutes
+	tokenCacheBuffer      = 10 * time.Second  // Buffer time before token expires
+)
+
 // tokenCacheEntry is used to cache token and its expiration time
 var tokenCache sync.Map // key: service|scope, value: tokenCacheEntry
 
@@ -115,15 +121,15 @@ func handleProxyRequest(c *gin.Context) {
 	if isBlobRequest {
 		// Try to use token cache for blob requests to avoid an extra 401 round-trip.
 		service := registry
-		scope := "repository:" + repoPath[:strings.Index(repoPath, "/")] + ":pull"
-		// Support multi-level repo path
+		scope := "repository:" + repoPath + ":pull"
+		// Support multi-level repo path by finding the last slash
 		if slashIdx := strings.LastIndex(repoPath, "/"); slashIdx != -1 {
 			scope = "repository:" + repoPath[:slashIdx] + ":pull"
 		}
 		cacheKey := service + "|" + scope
 		if v, ok := tokenCache.Load(cacheKey); ok {
 			entry := v.(tokenCacheEntry)
-			if entry.expireTime.After(time.Now().Add(10 * time.Second)) {
+			if entry.expireTime.After(time.Now().Add(tokenCacheBuffer)) {
 				// Cache hit, send request with Bearer token
 				req, _ := http.NewRequest(c.Request.Method, newURL, c.Request.Body)
 				for key, values := range c.Request.Header {
@@ -180,7 +186,7 @@ func forwardWithAuthRetry(url string, originalReq *http.Request) (*http.Response
 		return nil, err
 	}
 
-	// (need comment)
+	// Check if we received a 401 Unauthorized response with Bearer challenge
 	if resp.StatusCode == http.StatusUnauthorized {
 		authHeader := resp.Header.Get("Www-Authenticate")
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
@@ -233,7 +239,7 @@ func getBearerToken(realm, service, scope, basicAuth string) (string, error) {
 	key := service + "|" + scope
 	if v, ok := tokenCache.Load(key); ok {
 		entry := v.(tokenCacheEntry)
-		if entry.expireTime.After(time.Now().Add(10 * time.Second)) {
+		if entry.expireTime.After(time.Now().Add(tokenCacheBuffer)) {
 			ezap.Debugf("Token cache hit for key=%s", key)
 			return entry.token, nil
 		}
@@ -274,8 +280,13 @@ func getBearerToken(realm, service, scope, basicAuth string) (string, error) {
 		ExpiresIn   int    `json:"expires_in"`
 		IssuedAt    string `json:"issued_at"`
 	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = json.Unmarshal(body, &respData)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read upstream response body: %v", err)
+	}
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return "", fmt.Errorf("failed to parse upstream response JSON: %v", err)
+	}
 	var token string
 	if respData.Token != "" {
 		token = respData.Token
@@ -287,12 +298,12 @@ func getBearerToken(realm, service, scope, basicAuth string) (string, error) {
 		ezap.Errorf("No token in response: %s", string(body))
 		return "", fmt.Errorf("no token in response: %s", string(body))
 	}
-	// 计算过期时间
-	expire := time.Now().Add(300 * time.Second) // 默认5分钟
+	// Calculate expiration time
+	expire := time.Now().Add(defaultExpirationTime) // Default 5 minutes
 	if respData.ExpiresIn > 0 {
 		expire = time.Now().Add(time.Duration(respData.ExpiresIn) * time.Second)
 	}
-	// 存入缓存
+	// Store in cache
 	tokenCache.Store(key, tokenCacheEntry{token: token, expireTime: expire})
 	return token, nil
 }
@@ -305,7 +316,6 @@ func copyResponse(c *gin.Context, resp *http.Response) {
 		}
 	}
 	c.Status(resp.StatusCode)
-	io.Copy(c.Writer, resp.Body)
 }
 
 func main() {
@@ -338,7 +348,7 @@ func main() {
 
 	r.Any("/v2/*path", handleProxyRequest)
 
-	ezap.Infof("container registry proxy server listen on : :%s", port)
+	ezap.Infof("container registry proxy server listening on port %s", port)
 	for _, key := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"} {
 		if v := os.Getenv(key); v != "" {
 			ezap.Infof("%s=%s", key, v)
