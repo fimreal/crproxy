@@ -1,0 +1,74 @@
+// package auth
+
+// import (
+// 	"encoding/json"
+// 	"fmt"
+// 	"io"
+// 	"net/http"
+// 	"net/url"
+// 	"time"
+
+// 	"github.com/fimreal/goutils/ezap"
+// )
+
+// // getBearerToken exchanges Basic auth for a Bearer token from the auth server, with cache.
+// func getBearerToken(realm, service, scope, basicAuth string) (string, error) {
+// 	tokenURL, err := url.Parse(realm)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	q := tokenURL.Query()
+// 	if service != "" {
+// 		q.Set("service", service)
+// 	}
+// 	if scope != "" {
+// 		q.Set("scope", scope)
+// 	}
+// 	tokenURL.RawQuery = q.Encode()
+
+// 	req, err := http.NewRequest("GET", tokenURL.String(), nil)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	if basicAuth != "" {
+// 		req.Header.Set("Authorization", basicAuth)
+// 	}
+// 	ezap.Debugf("Requesting bearer token from: %s", tokenURL.String())
+// 	resp, err := http.DefaultClient.Do(req)
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	defer resp.Body.Close()
+// 	var respData struct {
+// 		Token       string `json:"token"`
+// 		AccessToken string `json:"access_token"`
+// 		ExpiresIn   int    `json:"expires_in"`
+// 		IssuedAt    string `json:"issued_at"`
+// 	}
+// 	body, err := io.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to read upstream response body: %v", err)
+// 	}
+// 	if err := json.Unmarshal(body, &respData); err != nil {
+// 		return "", fmt.Errorf("failed to parse upstream response JSON: %v", err)
+// 	}
+// 	var token string
+// 	if respData.Token != "" {
+// 		token = respData.Token
+// 		ezap.Debugf("Got bearer token")
+// 	} else if respData.AccessToken != "" {
+// 		token = respData.AccessToken
+// 		ezap.Debugf("Got access token")
+// 	} else {
+// 		ezap.Errorf("No token in response: %s", string(body))
+// 		return "", fmt.Errorf("no token in response: %s", string(body))
+// 	}
+// 	// Calculate expiration time
+// 	expire := time.Now().Add(defaultExpirationTime) // Default 5 minutes
+// 	if respData.ExpiresIn > 0 {
+// 		expire = time.Now().Add(time.Duration(respData.ExpiresIn) * time.Second)
+// 	}
+// 	// Store in cache
+// 	tokenCache.Store(key, tokenCacheEntry{token: token, expireTime: expire})
+// 	return token, nil
+// }
