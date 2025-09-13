@@ -18,10 +18,8 @@ func forward(c *gin.Context) {
 	tokenServer := "auth.docker.io"
 	DefaultUpstream := "dockerhub.2fw.top"
 
-	log.Printf("proxy: %s %s", c.Request.Method, c.Request.URL.String())
-
-	if c.Request.URL.Path == "/token" {
-		log.Printf("auth: %s", c.Request.Header.Get("Authorization"))
+	for k, vals := range c.Request.Header {
+		log.Printf("%s: %s ", k, strings.Join(vals, ","))
 	}
 
 	proxy := httputil.ReverseProxy{
@@ -29,12 +27,18 @@ func forward(c *gin.Context) {
 			req.URL.Scheme = "https"
 			req.URL.Host = DefaultUpstream
 			req.Host = DefaultUpstream
+
+			log.Printf("proxy: %s %s %s", c.Request.Method, c.Request.Host, c.Request.URL.String())
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			realm := resp.Header.Get("Www-Authenticate")
 			if realm != "" && strings.Contains(realm, "https://"+tokenServer+"/token") {
 				newRealm := strings.Replace(realm, "https://"+tokenServer+"/token", "http://192.168.10.55:5000/token", 1)
 				resp.Header.Set("Www-Authenticate", newRealm)
+			}
+
+			for k, vals := range resp.Header {
+				log.Printf("Req Header: %s: %s\n", k, strings.Join(vals, ","))
 			}
 			return nil
 		},
