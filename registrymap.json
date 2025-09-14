@@ -1,0 +1,8 @@
+{
+    "docker": "https://registry-1.docker.io",
+    "gcr": "https://gcr.io",
+    "ghcr": "https://ghcr.io",
+    "k8s": "https://registry.k8s.io",
+    "k8sgcr": "https://k8s.gcr.io",
+    "quay": "https://quay.io"
+}
