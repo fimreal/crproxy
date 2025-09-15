@@ -1,29 +1,88 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+//go:embed registrymap.json
+var embedRegistryMap []byte
+
 // RegistryMap 镜像仓库地址
-var RegistryMap = map[string]string{
-	"docker": "https://registry-1.docker.io",
-	"gcr":    "https://gcr.io",
-	"k8sgcr": "https://k8s.gcr.io",
-	"k8s":    "https://registry.k8s.io",
-	"quay":   "https://quay.io",
-	"ghcr":   "https://ghcr.io",
+var RegistryMap map[string]string
+
+// loadRegistryMap 从文件或URL加载 RegistryMap
+func loadRegistryMap(source string) (map[string]string, error) {
+	var data []byte
+	var err error
+
+	// 如果没有指定源，则使用内置的 RegistryMap
+	if source == "" {
+		data = embedRegistryMap
+		log.Printf("INFO use built-in registry map")
+	} else if strings.HasPrefix(source, "http") {
+		// 从URL加载
+		data, err = loadFromURL(source)
+		if err != nil {
+			return nil, fmt.Errorf("ERROR failed to load registry map from URL %s: %v", source, err)
+		}
+		log.Printf("Loaded registry map from URL: %s", source)
+	} else {
+		// 从本地文件加载
+		data, err = os.ReadFile(source)
+		if err != nil {
+			return nil, fmt.Errorf("ERROR failed to read registry map file %s: %v", source, err)
+		}
+		log.Printf("INFO Loaded registry map from file: %s", source)
+	}
+
+	// 解析JSON
+	var registryMap map[string]string
+	err = json.Unmarshal(data, &registryMap)
+	if err != nil {
+		return nil, fmt.Errorf("ERROR failed to parse registry map JSON: %v", err)
+	}
+
+	return registryMap, nil
 }
-var DefaultRegistry string
+
+// loadFromURL 从URL加载数据
+func loadFromURL(url string) ([]byte, error) {
+	// 创建HTTP客户端，设置超时时间
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// 发送GET请求
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ERROR HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	// 读取响应体
+	return io.ReadAll(resp.Body)
+}
+
 var DomainSuffix string
 
 func findRegistryURL(host string) (*url.URL, error) {
@@ -34,7 +93,7 @@ func findRegistryURL(host string) (*url.URL, error) {
 			return url.Parse(registryURL)
 		}
 	}
-	return nil, fmt.Errorf("registry not found")
+	return nil, fmt.Errorf("ERROR invalid registry [%s] given", host)
 }
 
 // forward handles proxy requests
@@ -55,7 +114,7 @@ func forward(c *gin.Context) {
 	proxy := httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			// 初始化请求的基本信息, 默认使用默认registry
-			defaultURL, _ := url.Parse(DefaultRegistry)
+			defaultURL, _ := url.Parse(RegistryMap["default"])
 			req.URL.Scheme = defaultURL.Scheme
 			req.URL.Host = defaultURL.Host
 			req.Host = defaultURL.Host
@@ -63,19 +122,19 @@ func forward(c *gin.Context) {
 			if !strings.Contains(c.Request.Host, ".") {
 				log.Printf("WARNING client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
 			} else if host, _, err := net.SplitHostPort(c.Request.Host); err == nil && net.ParseIP(host) != nil {
-				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, DefaultRegistry)
+				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
 			} else if net.ParseIP(host) != nil {
-				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, DefaultRegistry)
+				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
 			} else {
 				log.Printf("DEBUG client %s coming through host %s", c.ClientIP(), c.Request.Host)
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
-					log.Printf("DEBUG registry not found for %s, using default: %s", c.Request.Host, DefaultRegistry)
+					log.Printf("DEBUG registry not found for %s, using default: %s", c.Request.Host, RegistryMap["default"])
+				} else {
+					req.URL.Scheme = u.Scheme
+					req.URL.Host = u.Host
+					req.Host = u.Host
 				}
-
-				req.URL.Scheme = u.Scheme
-				req.URL.Host = u.Host
-				req.Host = u.Host
 			}
 
 			// 处理 token
@@ -158,10 +217,11 @@ func replaceRealm(header, newRealm string) string {
 func main() {
 	var listen string
 	var help bool
+	var registryMapSource string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
-	flag.StringVar(&DefaultRegistry, "default-registry", RegistryMap["docker"], "default registry as upstream")
+	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.Parse()
 
@@ -169,6 +229,24 @@ func main() {
 		flag.Usage()
 		return
 	}
+
+	// 加载RegistryMap
+	var err error
+	RegistryMap, err = loadRegistryMap(registryMapSource)
+	if err != nil {
+		log.Fatalf("ERROR Failed to load registry map: %v", err)
+	}
+
+	// 如果没有指定默认 registry，则任意选取其一
+	if RegistryMap["default"] == "" && len(RegistryMap) > 0 {
+		for _, v := range RegistryMap {
+			if v != "" {
+				RegistryMap["default"] = v
+				break
+			}
+		}
+	}
+	log.Printf("INFO use default registry: %s", RegistryMap["default"])
 
 	gin.SetMode(gin.ReleaseMode)
 
@@ -188,6 +266,6 @@ func main() {
 		})
 	})
 
-	log.Printf("crproxy listening on %s [domain-suffix=%q default-upstream=%q]", listen, DomainSuffix, DefaultRegistry)
+	log.Printf("INFO crproxy listening on %s [domain-suffix=%q]", listen, DomainSuffix)
 	log.Fatal(r.Run(listen))
 }
