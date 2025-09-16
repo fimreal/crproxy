@@ -1,6 +1,5 @@
 FROM golang:latest AS builder
 COPY . /srv/crproxy
-COPY .git /srv/crproxy/.git
 # ENV GOPROXY="https://goproxy.cn,direct"
 RUN cd /srv/crproxy && make build && ls -l bin
 

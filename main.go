@@ -75,11 +75,19 @@ func loadRegistryMap(source string) (map[string]string, error) {
 var DomainSuffix string
 
 func findRegistryURL(host string) (*url.URL, error) {
-	if DomainSuffix != "" && DomainSuffix != host && strings.HasSuffix(host, DomainSuffix) {
-		registry := strings.TrimSuffix(host, "."+DomainSuffix)
-		registryURL := RegistryMap[registry]
-		if registryURL != "" {
-			return url.Parse(registryURL)
+	if DomainSuffix != "" {
+		// 当请求域名等于 DomainSuffix 时，使用默认 registry
+		if DomainSuffix == host {
+			if defaultRegistry := RegistryMap["default"]; defaultRegistry != "" {
+				return url.Parse(defaultRegistry)
+			}
+		} else if strings.HasSuffix(host, "."+DomainSuffix) {
+			// 处理带前缀的镜像仓库域名
+			registry := strings.TrimSuffix(host, "."+DomainSuffix)
+			registryURL := RegistryMap[registry]
+			if registryURL != "" {
+				return url.Parse(registryURL)
+			}
 		}
 	}
 	return nil, fmt.Errorf("ERROR invalid registry [%s] given", host)
