@@ -86,10 +86,12 @@ func findRegistryURL(host string) (*url.URL, error) {
 }
 
 var tr = &http.Transport{
-	MaxIdleConns:        100,
-	IdleConnTimeout:     30 * time.Second,
-	MaxIdleConnsPerHost: 10,
-	TLSHandshakeTimeout: 10 * time.Second,
+	MaxIdleConns:          100,
+	IdleConnTimeout:       30 * time.Second,
+	MaxIdleConnsPerHost:   10,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ResponseHeaderTimeout: 30 * time.Second,
+	Proxy:                 http.ProxyFromEnvironment,
 }
 
 // forward handles proxy requests
