@@ -34,20 +34,32 @@ func loadRegistryMap(source string) (map[string]string, error) {
 	if source == "" {
 		data = embedRegistryMap
 		log.Printf("INFO use built-in registry map")
-	} else if strings.HasPrefix(source, "http") {
-		// 从URL加载
-		data, err = loadFromURL(source)
-		if err != nil {
-			return nil, fmt.Errorf("ERROR failed to load registry map from URL %s: %v", source, err)
-		}
-		log.Printf("Loaded registry map from URL: %s", source)
 	} else {
-		// 从本地文件加载
-		data, err = os.ReadFile(source)
-		if err != nil {
-			return nil, fmt.Errorf("ERROR failed to read registry map file %s: %v", source, err)
+		client := &http.Client{Timeout: 30 * time.Second}
+		var resp *http.Response
+		if strings.HasPrefix(source, "http") {
+			resp, err = client.Get(source)
+			if err != nil {
+				return nil, fmt.Errorf("ERROR failed to load registry map from URL %s: %v", source, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("ERROR HTTP %d: %s", resp.StatusCode, resp.Status)
+			}
+			log.Printf("Loaded registry map from URL: %s", source)
+		} else {
+			data, err = os.ReadFile(source)
+			if err != nil {
+				return nil, fmt.Errorf("ERROR failed to read registry map file %s: %v", source, err)
+			}
+			log.Printf("INFO Loaded registry map from file: %s", source)
 		}
-		log.Printf("INFO Loaded registry map from file: %s", source)
+		if resp != nil {
+			data, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("ERROR failed to read response body: %v", err)
+			}
+		}
 	}
 
 	// 解析JSON
@@ -58,29 +70,6 @@ func loadRegistryMap(source string) (map[string]string, error) {
 	}
 
 	return registryMap, nil
-}
-
-// loadFromURL 从URL加载数据
-func loadFromURL(url string) ([]byte, error) {
-	// 创建HTTP客户端，设置超时时间
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// 发送GET请求
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// 检查响应状态
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ERROR HTTP %d: %s", resp.StatusCode, resp.Status)
-	}
-
-	// 读取响应体
-	return io.ReadAll(resp.Body)
 }
 
 var DomainSuffix string
@@ -94,6 +83,13 @@ func findRegistryURL(host string) (*url.URL, error) {
 		}
 	}
 	return nil, fmt.Errorf("ERROR invalid registry [%s] given", host)
+}
+
+var tr = &http.Transport{
+	MaxIdleConns:        100,
+	IdleConnTimeout:     30 * time.Second,
+	MaxIdleConnsPerHost: 10,
+	TLSHandshakeTimeout: 10 * time.Second,
 }
 
 // forward handles proxy requests
@@ -191,6 +187,7 @@ func forward(c *gin.Context) {
 			// 非 token 请求默认代理响应
 			return nil
 		},
+		Transport: tr,
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)
