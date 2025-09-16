@@ -1,4 +1,5 @@
 {
+    "default": "https://registry-1.docker.io",
     "docker": "https://registry-1.docker.io",
     "gcr": "https://gcr.io",
     "ghcr": "https://ghcr.io",
