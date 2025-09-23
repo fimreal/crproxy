@@ -1,4 +1,4 @@
-name: crproxy
+name: Build and Release
 
 on:
   push:
@@ -35,20 +35,56 @@ jobs:
           prerelease: false
 
       - name: go build
-        run: make build && ls -l bin
+        run: make all && ls -l bin
 
-      - name: Upload Release Asset
+      - name: Upload Release Assets
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/crproxy
+          asset_path: ./bin/crproxy-linux-amd64
           asset_name: crproxy-${{ env.GIT_TAG }}-linux-amd64
           asset_content_type: application/octet-stream
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/crproxy-linux-arm64
+          asset_name: crproxy-${{ env.GIT_TAG }}-linux-arm64
+          asset_content_type: application/octet-stream
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/crproxy-darwin-amd64
+          asset_name: crproxy-${{ env.GIT_TAG }}-darwin-amd64
+          asset_content_type: application/octet-stream
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/crproxy-darwin-arm64
+          asset_name: crproxy-${{ env.GIT_TAG }}-darwin-arm64
+          asset_content_type: application/octet-stream
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/crproxy-windows-amd64.exe
+          asset_name: crproxy-${{ env.GIT_TAG }}-windows-amd64.exe
+          asset_content_type: application/octet-stream
 
-  dockerhub:
-    name: build and push to dockerhub
+  docker-build:
+    name: docker build and push to dockerhub
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -75,7 +111,13 @@ jobs:
           push: true
           file: Dockerfile
           provenance: false
+          labels: |-
+            org.opencontainers.image.title=crproxy
+            org.opencontainers.image.description=crproxy is a proxy server for container registry.
+            org.opencontainers.image.url=${{ github.event.repository.html_url }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.GIT_TAG }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:${{ env.GIT_TAG }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/crproxy:${{ github.sha }}

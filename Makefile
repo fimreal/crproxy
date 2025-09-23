@@ -13,6 +13,8 @@ default: build
 $(BINDIR):
 	mkdir -p $(BINDIR)
 
+all: $(PLATFORM_LIST)
+
 build: $(BINDIR)
 	$(GOBUILD) -o $(BINDIR)/$(NAME) main.go
 
@@ -32,7 +34,10 @@ windows-amd64: $(BINDIR)
 	GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-windows-amd64.exe main.go
 
 docker:
-	docker build -t $(NAME) .
+	docker build --build-arg APP_NAME=$(NAME) -t $(NAME) .
+
+container:
+	container build --build-arg APP_NAME=$(NAME) -t $(NAME) .
 
 clean:
 	rm -rf $(BINDIR)

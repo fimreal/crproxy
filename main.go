@@ -221,16 +221,24 @@ func replaceRealm(header, newRealm string) string {
 	})
 }
 
+var version, buildTime string
+
 func main() {
-	var listen string
-	var help bool
-	var registryMapSource string
+	var help, showVersion bool
+	var listen, registryMapSource string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
 	flag.BoolVar(&help, "help", false, "show help")
+	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("crproxy %s\n", version)
+		fmt.Printf("build time: %s\n", buildTime)
+		return
+	}
 
 	if help {
 		flag.Usage()

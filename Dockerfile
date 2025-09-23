@@ -10,7 +10,6 @@ RUN apk --no-cache add ca-certificates
 
 # get the final image
 FROM scratch
-LABEL source.url="https://github.com/fimreal/crproxy"
 
 COPY --from=ca /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /srv/crproxy/bin/crproxy /crproxy

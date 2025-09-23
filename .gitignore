@@ -33,3 +33,4 @@ go.work.sum
 
 #  local test
 .tmp/
+bin/
