@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,8 +15,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -107,6 +112,105 @@ func findRegistryURL(host string) (*url.URL, error) {
 	return nil, fmt.Errorf("invalid registry [%s] given", host)
 }
 
+var (
+	blobCacheDir string
+	cacheEnabled bool
+	cacheMutex   sync.RWMutex
+)
+
+// 初始化缓存目录
+func initCache() error {
+	if !cacheEnabled {
+		return nil
+	}
+
+	// 创建缓存目录
+	if err := os.MkdirAll(blobCacheDir, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %v", err)
+	}
+
+	log.Printf("INFO cache: initialized disk cache at %s", blobCacheDir)
+	return nil
+}
+
+// 生成缓存文件路径
+func getCacheFilePath(digest string) string {
+	// 使用 SHA256 哈希作为缓存文件名，避免文件名过长
+	hash := sha256.Sum256([]byte(digest))
+	filename := hex.EncodeToString(hash[:])
+	return filepath.Join(blobCacheDir, filename[:2], filename[2:4], filename)
+}
+
+// 检查缓存是否存在
+func isBlobCached(digest string) bool {
+	if !cacheEnabled {
+		return false
+	}
+
+	cachePath := getCacheFilePath(digest)
+	_, err := os.Stat(cachePath)
+	return err == nil
+}
+
+// 从缓存读取 blob
+func serveBlobFromCache(c *gin.Context, digest string) error {
+	if !cacheEnabled {
+		return fmt.Errorf("cache disabled")
+	}
+
+	cachePath := getCacheFilePath(digest)
+	file, err := os.Open(cachePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// 获取文件信息以设置 Content-Length
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// 设置响应头
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Content-Length", fmt.Sprintf("%d", stat.Size()))
+	c.Status(http.StatusOK)
+
+	// 将文件内容写入响应
+	_, err = io.Copy(c.Writer, file)
+	return err
+}
+
+// 将 blob 保存到缓存
+func saveBlobToCache(digest string, content []byte) error {
+	if !cacheEnabled {
+		return nil
+	}
+
+	cachePath := getCacheFilePath(digest)
+
+	// 创建目录
+	dir := filepath.Dir(cachePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	// 写入文件
+	return os.WriteFile(cachePath, content, 0644)
+}
+
+// 从响应中提取 digest
+func extractDigestFromPath(path string) string {
+	// 路径格式类似: /v2/library/nginx/blobs/sha256:abc123...
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part == "blobs" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
 var tr = &http.Transport{
 	MaxIdleConns:          100,
 	IdleConnTimeout:       30 * time.Second,
@@ -118,6 +222,18 @@ var tr = &http.Transport{
 
 // forward handles proxy requests
 func forward(c *gin.Context) {
+	// 检查是否是 blobs 请求并尝试从缓存提供服务
+	if cacheEnabled && c.Request.Method == "GET" && strings.Contains(c.Request.URL.Path, "/blobs/") {
+		digest := extractDigestFromPath(c.Request.URL.Path)
+		if digest != "" && isBlobCached(digest) {
+			log.Printf("INFO cache: serving blob %s from cache", digest)
+			if err := serveBlobFromCache(c, digest); err == nil {
+				return
+			} else {
+				log.Printf("WARNING cache: failed to serve from cache, fallback to upstream: %v", err)
+			}
+		}
+	}
 	// 预先检查registry是否存在（针对使用DomainSuffix的情况）
 	if DomainSuffix != "" && strings.Contains(c.Request.Host, DomainSuffix) {
 		_, err := findRegistryURL(c.Request.Host)
@@ -220,6 +336,35 @@ func forward(c *gin.Context) {
 				log.Printf("INFO modify resp header Www-Authenticate: %s => %s", wwwAuth, resp.Header.Get("Www-Authenticate"))
 			}
 
+			// 缓存成功的 blobs 响应
+			if cacheEnabled &&
+				resp.Request.Method == "GET" &&
+				resp.StatusCode == http.StatusOK &&
+				strings.Contains(resp.Request.URL.Path, "/blobs/") {
+
+				digest := extractDigestFromPath(resp.Request.URL.Path)
+				if digest != "" {
+					// 读取响应体内容
+					body, err := io.ReadAll(resp.Body)
+					if err != nil {
+						log.Printf("WARNING cache: failed to read response body for caching: %v", err)
+					} else {
+						// 保存到缓存
+						go func() {
+							if err := saveBlobToCache(digest, body); err != nil {
+								log.Printf("WARNING cache: failed to save blob to cache: %v", err)
+							} else {
+								log.Printf("INFO cache: blob %s saved to cache", digest)
+							}
+						}()
+
+						// 重新设置响应体
+						resp.Body = io.NopCloser(bytes.NewBuffer(body))
+						resp.ContentLength = int64(len(body))
+					}
+				}
+			}
+
 			// 非 token 请求默认代理响应
 			return nil
 		},
@@ -254,10 +399,14 @@ func main() {
 	var showVersion bool
 	var listen string
 	var registryMapSource string
+	var cacheDir string
+	var enableCache bool
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
+	flag.StringVar(&cacheDir, "cache-dir", ".cache", "directory to store cached blobs")
+	flag.BoolVar(&enableCache, "enable-cache", false, "enable disk cache for blobs")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.Parse()
@@ -280,8 +429,15 @@ func main() {
 	}
 	log.Printf("INFO registry-map: using default registry: %s", RegistryMap["default"])
 
-	gin.SetMode(gin.ReleaseMode)
+	// 初始化缓存
+	cacheEnabled = enableCache
+	blobCacheDir = cacheDir
+	if err := initCache(); err != nil {
+		log.Fatalf("ERROR Failed to initialize cache: %v", err)
+	}
 
+	// gin
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
 

@@ -32,5 +32,5 @@ go.work.sum
 # .vscode/
 
 #  local test
-.tmp/
 bin/
+.cache/
