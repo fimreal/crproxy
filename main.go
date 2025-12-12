@@ -72,10 +72,13 @@ func loadRegistryMap(source string) (map[string]string, error) {
 
 	// 如果没有指定默认 registry，则任意选取其一
 	if registryMap["default"] == "" && len(registryMap) > 0 {
-		for _, v := range registryMap {
-			if v != "" {
-				registryMap["default"] = v
-				break
+		for k, v := range registryMap {
+			if k != "default" && v != "" {
+				// 验证 URL 格式
+				if _, err := url.Parse(v); err == nil {
+					registryMap["default"] = v
+					break
+				}
 			}
 		}
 	}
@@ -130,11 +133,19 @@ func forward(c *gin.Context) {
 
 	// handle proxy request
 	proxy := httputil.ReverseProxy{
+		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
+			log.Printf("ERROR proxy error: %v", err)
+			rw.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(rw, "Bad Gateway: %v", err)
+		},
 		Director: func(req *http.Request) {
 			// 初始化请求的基本信息, 默认使用默认registry
 			defaultURL, err := url.Parse(RegistryMap["default"])
 			if err != nil {
 				log.Printf("ERROR failed to parse default registry URL: %v", err)
+				// 设置一个无效的 URL，让代理返回错误
+				req.URL.Scheme = "invalid"
+				req.URL.Host = "invalid"
 				return
 			}
 			req.URL.Scheme = defaultURL.Scheme
@@ -169,6 +180,22 @@ func forward(c *gin.Context) {
 				u, err := url.Parse(upstream)
 				if err != nil {
 					log.Printf("ERROR failed to parse token URL: %v", err)
+					req.URL.Scheme = "invalid"
+					req.URL.Host = "invalid"
+					return
+				}
+				// 验证 URL scheme，只允许 http 和 https
+				if u.Scheme != "http" && u.Scheme != "https" {
+					log.Printf("ERROR invalid token URL scheme: %s", u.Scheme)
+					req.URL.Scheme = "invalid"
+					req.URL.Host = "invalid"
+					return
+				}
+				// 验证 Host 不为空
+				if u.Host == "" {
+					log.Printf("ERROR token URL has empty host")
+					req.URL.Scheme = "invalid"
+					req.URL.Host = "invalid"
 					return
 				}
 				// 改过的 url 例如: http://127.0.0.1:5000/token/https://auth.docker.io/token?client_id=containerization-registry-client&service=registry.docker.io&scope=repository:library/alpine:pull
