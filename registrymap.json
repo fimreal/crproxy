@@ -1,6 +1,7 @@
 {
     "default": "https://registry-1.docker.io",
     "docker": "https://registry-1.docker.io",
+    "ecr": "https://public.ecr.aws",
     "gcr": "https://gcr.io",
     "ghcr": "https://ghcr.io",
     "k8s": "https://registry.k8s.io",

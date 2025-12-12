@@ -49,6 +49,10 @@ func loadRegistryMap(source string) (map[string]string, error) {
 				return nil, fmt.Errorf("ERROR HTTP %d: %s", resp.StatusCode, resp.Status)
 			}
 			log.Printf("INFO registry-map: loaded registry map from URL: %s", source)
+			data, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("ERROR failed to read response body: %v", err)
+			}
 		} else {
 			// 从本地文件加载
 			data, err = os.ReadFile(source)
@@ -56,12 +60,6 @@ func loadRegistryMap(source string) (map[string]string, error) {
 				return nil, fmt.Errorf("ERROR failed to read registry map file %s: %v", source, err)
 			}
 			log.Printf("INFO registry-map: loaded registry map from file: %s", source)
-		}
-		if resp != nil {
-			data, err = io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, fmt.Errorf("ERROR failed to read response body: %v", err)
-			}
 		}
 	}
 
@@ -122,29 +120,37 @@ func forward(c *gin.Context) {
 	if DomainSuffix != "" && strings.Contains(c.Request.Host, DomainSuffix) {
 		_, err := findRegistryURL(c.Request.Host)
 		if err != nil {
-			log.Printf("ERROR registry not found desc=\"%v\"", err)
+			log.Printf("ERROR registry not found for host %s: %v", c.Request.Host, err)
 			c.JSON(http.StatusNotFound, gin.H{
-				"message": "registry not found: " + c.Request.Host + ", please visit /help for available registries",
+				"message": fmt.Sprintf("registry not found: %s, please visit /help for available registries", c.Request.Host),
 			})
 			return
 		}
 	}
 
-	// handel proxy request
+	// handle proxy request
 	proxy := httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			// 初始化请求的基本信息, 默认使用默认registry
-			defaultURL, _ := url.Parse(RegistryMap["default"])
+			defaultURL, err := url.Parse(RegistryMap["default"])
+			if err != nil {
+				log.Printf("ERROR failed to parse default registry URL: %v", err)
+				return
+			}
 			req.URL.Scheme = defaultURL.Scheme
 			req.URL.Host = defaultURL.Host
 			req.Host = defaultURL.Host
 
-			if !strings.Contains(c.Request.Host, ".") {
+			// 检查是否为IP地址
+			host := c.Request.Host
+			if hostWithPort, _, err := net.SplitHostPort(c.Request.Host); err == nil {
+				host = hostWithPort
+			}
+
+			if net.ParseIP(host) != nil {
+				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
+			} else if !strings.Contains(host, ".") {
 				log.Printf("WARNING client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
-			} else if host, _, err := net.SplitHostPort(c.Request.Host); err == nil && net.ParseIP(host) != nil {
-				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
-			} else if net.ParseIP(host) != nil {
-				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
 			} else {
 				log.Printf("INFO client %s coming through host %s", c.ClientIP(), c.Request.Host)
 				u, err := findRegistryURL(c.Request.Host)
@@ -157,12 +163,12 @@ func forward(c *gin.Context) {
 				}
 			}
 
-			// 处理 token
+			// 处理 token 路径
 			if strings.HasPrefix(req.URL.Path, "/token/") {
 				upstream := req.URL.Path[len("/token/"):]
 				u, err := url.Parse(upstream)
 				if err != nil {
-					log.Printf("ERROR proxy err url.Parse: %v", err)
+					log.Printf("ERROR failed to parse token URL: %v", err)
 					return
 				}
 				// 改过的 url 例如: http://127.0.0.1:5000/token/https://auth.docker.io/token?client_id=containerization-registry-client&service=registry.docker.io&scope=repository:library/alpine:pull
@@ -171,17 +177,22 @@ func forward(c *gin.Context) {
 				req.URL.Host = u.Host
 				req.Host = u.Host
 				req.URL.Path = u.Path
+				if u.RawQuery != "" {
+					req.URL.RawQuery = u.RawQuery
+				}
+			}
+
+			// 获取请求scheme
+			reqScheme := "http"
+			if c.Request.URL.Scheme != "" {
+				reqScheme = c.Request.URL.Scheme
+			} else if c.Request.TLS != nil {
+				reqScheme = "https"
 			}
 
 			log.Printf("INFO Proxying request: %s %s://%s%s -> %s://%s%s",
 				c.Request.Method,
-				func() string {
-					if c.Request.URL.Scheme != "" {
-						return c.Request.URL.Scheme
-					} else {
-						return "http"
-					}
-				}(),
+				reqScheme,
 				c.Request.Host,
 				c.Request.URL.RequestURI(),
 				req.URL.Scheme,
@@ -189,19 +200,16 @@ func forward(c *gin.Context) {
 				req.URL.RequestURI())
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// 匿名请求遇到 401 时
+			// 匿名请求遇到 401 时记录日志
 			if resp.StatusCode == http.StatusUnauthorized {
-				log.Printf("ERROR proxy err, httpcode: %d %s", resp.StatusCode, resp.Request.URL.String())
-				// for k, vals := range resp.Header {
-				// 	log.Printf("DEBUG Resp Header: %s: %s\n", k, strings.Join(vals, ","))
-				// }
+				log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
 			}
 
-			// 处理 token
+			// 处理 Www-Authenticate header，修改 realm 地址到本服务
 			if wwwAuth := resp.Header.Get("Www-Authenticate"); wwwAuth != "" {
 				realmURL, ok := getRealm(wwwAuth)
 				if !ok {
-					log.Printf("ERROR proxy err: getRealmURL: Header Www-Authenticate: %v", wwwAuth)
+					log.Printf("ERROR failed to extract realm from Www-Authenticate header: %v", wwwAuth)
 					return nil
 				}
 
@@ -217,10 +225,9 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				log.Printf("INFO modify resp header Www-Authenticate: %s => %s", wwwAuth, resp.Header.Get("Www-Authenticate"))
+				log.Printf("INFO modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
 			}
 
-			// 非 token 请求默认代理响应
 			return nil
 		},
 		Transport: tr,
@@ -278,6 +285,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("ERROR Failed to load registry map: %v", err)
 	}
+
+	// 验证默认registry是否存在
+	if RegistryMap["default"] == "" {
+		log.Fatalf("ERROR no default registry found in registry map")
+	}
 	log.Printf("INFO registry-map: using default registry: %s", RegistryMap["default"])
 
 	gin.SetMode(gin.ReleaseMode)
@@ -290,10 +302,10 @@ func main() {
 
 	r.GET("/help", func(c *gin.Context) {
 		log.Printf("INFO client %s request help information", c.ClientIP())
-		c.JSON(200, RegistryMap)
+		c.JSON(http.StatusOK, RegistryMap)
 	})
 	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
 	})
