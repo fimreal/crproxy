@@ -152,7 +152,7 @@ func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error
 
 			// 如果重定向到不同的域名，在代理内部跟随重定向
 			if redirectURL.Host != req.URL.Host {
-				debugLog("DEBUG redirect to different host detected: %s -> %s, following internally", req.URL.Host, redirectURL.Host)
+				debugLog("DEBUG following redirect: %s -> %s", req.URL.Host, redirectURL.Host)
 
 				// 关闭原始响应体
 				resp.Body.Close()
@@ -306,7 +306,7 @@ func readFromCache(c *gin.Context) bool {
 	}
 	c.Data(cachedResp.StatusCode, contentType, cachedResp.Body)
 
-	log.Printf("INFO cache HIT for %s", c.Request.URL.String())
+	debugLog("DEBUG cache HIT: %s", c.Request.URL.Path)
 	return true
 }
 
@@ -385,7 +385,7 @@ func writeToCacheAsync(body []byte, headers map[string]string, statusCode int, p
 		return
 	}
 
-	debugLog("INFO cache MISS, saved to cache: %s", cachePath)
+	debugLog("DEBUG cache MISS, saved: %s", cachePath)
 }
 
 // tryRemoveFile 尝试删除文件，避免因文件不存在导致的错误日志
@@ -485,10 +485,7 @@ func forward(c *gin.Context) {
 
 			if net.ParseIP(host) != nil {
 				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
-			} else if !strings.Contains(host, ".") {
-				debugLog("INFO client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
 			} else {
-				debugLog("INFO client %s coming through host %s", c.ClientIP(), c.Request.Host)
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
 					log.Printf("WARNING registry not found for %s, using default: %s", c.Request.Host, RegistryMap["default"])
@@ -534,18 +531,8 @@ func forward(c *gin.Context) {
 				}
 			}
 
-			// 获取请求scheme
-			reqScheme := "http"
-			if c.Request.URL.Scheme != "" {
-				reqScheme = c.Request.URL.Scheme
-			} else if c.Request.TLS != nil {
-				reqScheme = "https"
-			}
-
-			debugLog("INFO Proxying request: %s %s://%s%s -> %s://%s%s",
+			debugLog("DEBUG %s %s -> %s://%s%s",
 				c.Request.Method,
-				reqScheme,
-				c.Request.Host,
 				c.Request.URL.RequestURI(),
 				req.URL.Scheme,
 				req.URL.Host,
@@ -577,7 +564,7 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				debugLog("INFO modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
+				debugLog("DEBUG modified Www-Authenticate: %s", newWWWAuth)
 			}
 
 			// 写入缓存（同步读取响应体，异步写入文件）
