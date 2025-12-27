@@ -23,6 +23,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var version, buildTime string
+
 const (
 	// cacheWriteTimeout 缓存写入超时时间（5分钟，适合大文件）
 	cacheWriteTimeout = 5 * time.Minute
@@ -33,15 +35,6 @@ var embedRegistryMap []byte
 
 // RegistryMap 镜像仓库地址
 var RegistryMap map[string]string
-
-// debugEnabled 是否开启调试日志（通过环境变量 CRPROXY_DEBUG 控制）
-var debugEnabled = os.Getenv("CRPROXY_DEBUG") == "1"
-
-func debugLog(format string, args ...interface{}) {
-	if debugEnabled {
-		log.Printf(format, args...)
-	}
-}
 
 // loadRegistryMap 从文件或URL加载 RegistryMap
 func loadRegistryMap(source string) (map[string]string, error) {
@@ -458,7 +451,7 @@ func writeToCacheAsync(body []byte, headers map[string]string, statusCode int, p
 		log.Printf("WARNING failed to remove cache marker: %v", err)
 	}
 
-	debugLog("INFO cache MISS, saved to cache: %s", cachePath)
+	debugLog("DEBUG cache MISS, saved to cache: %s", cachePath)
 }
 
 // tryRemoveFile 尝试删除文件，避免因文件不存在导致的错误日志
@@ -560,9 +553,9 @@ func forward(c *gin.Context) {
 			if net.ParseIP(host) != nil {
 				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
 			} else if !strings.Contains(host, ".") {
-				debugLog("INFO client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
+				debugLog("DEBUG client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
 			} else {
-				debugLog("INFO client %s coming through host %s", c.ClientIP(), c.Request.Host)
+				debugLog("DEBUG client %s coming through host %s", c.ClientIP(), c.Request.Host)
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
 					log.Printf("WARNING registry not found for %s, using default: %s", c.Request.Host, RegistryMap["default"])
@@ -616,7 +609,7 @@ func forward(c *gin.Context) {
 				reqScheme = "https"
 			}
 
-			debugLog("INFO Proxying request: %s %s://%s%s -> %s://%s%s",
+			debugLog("DEBUG Proxying request: %s %s://%s%s -> %s://%s%s",
 				c.Request.Method,
 				reqScheme,
 				c.Request.Host,
@@ -626,9 +619,13 @@ func forward(c *gin.Context) {
 				req.URL.RequestURI())
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			// 匿名请求遇到 401 时记录日志
-			if resp.StatusCode == http.StatusUnauthorized {
-				log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
+			if resp.StatusCode != http.StatusOK {
+				if resp.StatusCode == http.StatusUnauthorized {
+					// 匿名请求遇到 401 时记录日志
+					log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
+				} else {
+					debugLog("DEBUG proxy received unexpected response: %d %s", resp.StatusCode, resp.Request.URL.String())
+				}
 			}
 
 			// 处理 Www-Authenticate header，修改 realm 地址到本服务
@@ -651,7 +648,7 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				debugLog("INFO modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
+				debugLog("DEBUG modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
 			}
 
 			// 写入缓存（同步读取响应体，异步写入文件）
@@ -685,7 +682,14 @@ func replaceRealm(header, newRealm string) string {
 	})
 }
 
-var version, buildTime string
+// Debug 是否开启调试日志（通过环境变量 DEBUG 控制）
+var Debug = os.Getenv("DEBUG") == "1"
+
+func debugLog(format string, args ...interface{}) {
+	if Debug {
+		log.Printf(format, args...)
+	}
+}
 
 func main() {
 	var help bool
@@ -718,12 +722,6 @@ func main() {
 		log.Fatalf("ERROR Failed to load registry map: %v", err)
 	}
 
-	// 验证默认registry是否存在
-	if RegistryMap["default"] == "" {
-		log.Fatalf("ERROR no default registry found in registry map")
-	}
-	log.Printf("INFO registry-map: using default registry: %s", RegistryMap["default"])
-
 	// 初始化缓存目录
 	if CacheDir != "" {
 		if err := os.MkdirAll(CacheDir, 0755); err != nil {
@@ -734,7 +732,9 @@ func main() {
 		log.Printf("INFO cache: disabled")
 	}
 
-	gin.SetMode(gin.ReleaseMode)
+	if !Debug {
+		gin.SetMode(gin.ReleaseMode)
+	}
 
 	r := gin.New()
 	r.Use(gin.Recovery())
