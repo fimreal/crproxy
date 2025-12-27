@@ -94,7 +94,6 @@ func loadRegistryMap(source string) (map[string]string, error) {
 		}
 	}
 
-	debugLog("DEBUG registry-map: available registries: %v", registryMap)
 	return registryMap, nil
 }
 
@@ -129,6 +128,74 @@ var tr = &http.Transport{
 	Proxy:                 http.ProxyFromEnvironment,
 }
 
+// createHTTPClient 创建支持重定向的 HTTP 客户端
+func createHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// 允许最多 10 次重定向
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			// 记录重定向信息
+			if len(via) > 0 {
+				debugLog("DEBUG following redirect: %s -> %s", via[len(via)-1].URL.String(), req.URL.String())
+			}
+			return nil
+		},
+		Timeout: 5 * time.Minute, // 设置超时时间
+	}
+}
+
+// redirectTransport 包装 Transport 以支持在代理内部处理重定向
+type redirectTransport struct {
+	transport http.RoundTripper
+	client    *http.Client
+}
+
+func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 先执行原始请求
+	resp, err := rt.transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果是重定向响应（301, 302, 307, 308），且重定向到不同域名，则在内部跟随
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			redirectURL, err := url.Parse(location)
+			if err != nil {
+				return resp, nil // 返回原始响应，让客户端处理
+			}
+
+			// 如果重定向到不同的域名，在代理内部跟随重定向
+			if redirectURL.Host != req.URL.Host {
+				debugLog("DEBUG redirect to different host detected: %s -> %s, following internally", req.URL.Host, redirectURL.Host)
+
+				// 关闭原始响应体
+				resp.Body.Close()
+
+				// 创建重定向请求
+				redirectReq := req.Clone(req.Context())
+				redirectReq.URL = redirectURL
+				redirectReq.Host = redirectURL.Host
+
+				// 跟随重定向（使用支持重定向的客户端）
+				redirectResp, err := rt.client.Do(redirectReq)
+				if err != nil {
+					log.Printf("ERROR failed to follow redirect: %v", err)
+					return resp, nil // 返回原始响应
+				}
+
+				return redirectResp, nil
+			}
+		}
+	}
+
+	return resp, nil
+}
+
 // getCacheKey 根据请求生成缓存键
 func getCacheKey(req *http.Request) string {
 	key := req.Method + ":" + req.URL.String()
@@ -151,13 +218,12 @@ func getDigestCachePath(digest string) string {
 }
 
 // isDigestRequest 检查是否是 digest 请求（基于内容寻址，永久有效）
+// 只检查 blobs，不检查 manifests（manifest 会变化，不应该缓存）
 func isDigestRequest(path string) bool {
-	// 检查路径中是否包含 sha256: 或 sha512: 等 digest
-	// 格式通常是: /v2/<repo>/blobs/sha256:<digest> 或 /v2/<repo>/manifests/sha256:<digest>
+	// 只缓存 blobs（镜像层），不缓存 manifests（清单文件会更新）
+	// 格式通常是: /v2/<repo>/blobs/sha256:<digest> 或 /v2/<repo>/blobs/sha512:<digest>
 	return strings.Contains(path, "/blobs/sha256:") ||
-		strings.Contains(path, "/blobs/sha512:") ||
-		strings.Contains(path, "/manifests/sha256:") ||
-		strings.Contains(path, "/manifests/sha512:")
+		strings.Contains(path, "/blobs/sha512:")
 }
 
 // extractDigestFromPath 从路径中提取 digest 值
@@ -524,6 +590,9 @@ func forward(c *gin.Context) {
 	}
 
 	// handle proxy request
+	// 创建支持重定向的 HTTP 客户端
+	httpClient := createHTTPClient()
+
 	proxy := httputil.ReverseProxy{
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
 			log.Printf("ERROR proxy error: %v", err)
@@ -658,7 +727,10 @@ func forward(c *gin.Context) {
 
 			return nil
 		},
-		Transport: tr,
+		Transport: &redirectTransport{
+			transport: tr,
+			client:    httpClient,
+		},
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)
@@ -696,10 +768,12 @@ func main() {
 	var showVersion bool
 	var listen string
 	var registryMapSource string
+	var defaultRegistry string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
+	flag.StringVar(&defaultRegistry, "default-registry", "", "set default registry, more effective than -registry-map, eg. https://registry-1.docker.io")
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.BoolVar(&showVersion, "version", false, "show version")
@@ -721,6 +795,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("ERROR Failed to load registry map: %v", err)
 	}
+
+	if defaultRegistry != "" {
+		RegistryMap["default"] = defaultRegistry
+		log.Printf("WARNING set default registry %s", defaultRegistry)
+	}
+	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
 
 	// 初始化缓存目录
 	if CacheDir != "" {
