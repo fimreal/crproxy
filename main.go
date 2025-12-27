@@ -94,6 +94,7 @@ func loadRegistryMap(source string) (map[string]string, error) {
 		}
 	}
 
+	debugLog("DEBUG registry-map: available registries: %v", registryMap)
 	return registryMap, nil
 }
 
@@ -128,100 +129,9 @@ var tr = &http.Transport{
 	Proxy:                 http.ProxyFromEnvironment,
 }
 
-// createHTTPClient 创建支持重定向的 HTTP 客户端
-func createHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: tr,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// 允许最多 10 次重定向
-			if len(via) >= 10 {
-				return fmt.Errorf("stopped after 10 redirects")
-			}
-			// 记录重定向信息
-			if len(via) > 0 {
-				debugLog("DEBUG following redirect: %s -> %s", via[len(via)-1].URL.String(), req.URL.String())
-			}
-			return nil
-		},
-		Timeout: 5 * time.Minute, // 设置超时时间
-	}
-}
-
-// redirectTransport 包装 Transport 以支持在代理内部处理重定向
-type redirectTransport struct {
-	transport http.RoundTripper
-	client    *http.Client
-}
-
-func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// 先执行原始请求
-	resp, err := rt.transport.RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
-
-	// 如果是重定向响应（301, 302, 307, 308），且重定向到不同域名，则在内部跟随
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		location := resp.Header.Get("Location")
-		if location != "" {
-			redirectURL, err := url.Parse(location)
-			if err != nil {
-				return resp, nil // 返回原始响应，让客户端处理
-			}
-
-			// 如果重定向到不同的域名，在代理内部跟随重定向
-			if redirectURL.Host != req.URL.Host {
-				debugLog("DEBUG redirect to different host detected: %s -> %s, following internally", req.URL.Host, redirectURL.Host)
-
-				// 关闭原始响应体
-				resp.Body.Close()
-
-				// 创建重定向请求
-				redirectReq := req.Clone(req.Context())
-				redirectReq.URL = redirectURL
-				redirectReq.Host = redirectURL.Host
-
-				// 跟随重定向（使用支持重定向的客户端）
-				redirectResp, err := rt.client.Do(redirectReq)
-				if err != nil {
-					log.Printf("ERROR failed to follow redirect: %v", err)
-					return resp, nil // 返回原始响应
-				}
-
-				return redirectResp, nil
-			}
-		}
-	}
-
-	return resp, nil
-}
-
-// getCacheKey 根据请求生成缓存键
-func getCacheKey(req *http.Request) string {
-	key := req.Method + ":" + req.URL.String()
-	hash := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(hash[:])
-}
-
-// getCachePath 获取缓存文件路径
-func getCachePath(cacheKey string) string {
-	// 使用前两个字符作为子目录，避免单个目录文件过多
-	subDir := cacheKey[:2]
-	return filepath.Join(CacheDir, subDir, cacheKey)
-}
-
-// getDigestCachePath 根据digest获取缓存文件路径
-func getDigestCachePath(digest string) string {
-	// 使用前两个字符作为子目录，避免单个目录文件过多
-	subDir := digest[:2]
-	return filepath.Join(CacheDir, subDir, digest)
-}
-
-// isDigestRequest 检查是否是 digest 请求（基于内容寻址，永久有效）
-// 只检查 blobs，不检查 manifests（manifest 会变化，不应该缓存）
-func isDigestRequest(path string) bool {
+// isBlobRequest 检查是否是 blob 请求（只缓存 blobs，不缓存 manifests）
+func isBlobRequest(path string) bool {
 	// 只缓存 blobs（镜像层），不缓存 manifests（清单文件会更新）
-	// 格式通常是: /v2/<repo>/blobs/sha256:<digest> 或 /v2/<repo>/blobs/sha512:<digest>
 	return strings.Contains(path, "/blobs/sha256:") ||
 		strings.Contains(path, "/blobs/sha512:")
 }
@@ -229,113 +139,63 @@ func isDigestRequest(path string) bool {
 // extractDigestFromPath 从路径中提取 digest 值
 func extractDigestFromPath(path string) string {
 	// 提取 sha256:<digest> 或 sha512:<digest>
-	parts := strings.Split(path, "sha256:")
-	if len(parts) > 1 {
-		// 取第一部分（去掉可能的查询参数）
-		digest := strings.Split(parts[1], "?")[0]
-		digest = strings.Split(digest, "/")[0]
-		return digest
-	}
-	parts = strings.Split(path, "sha512:")
-	if len(parts) > 1 {
-		digest := strings.Split(parts[1], "?")[0]
-		digest = strings.Split(digest, "/")[0]
-		return digest
+	for _, prefix := range []string{"sha256:", "sha512:"} {
+		idx := strings.Index(path, prefix)
+		if idx != -1 {
+			digest := path[idx+len(prefix):]
+			// 去掉可能的查询参数和路径分隔符
+			digest = strings.Split(digest, "?")[0]
+			digest = strings.Split(digest, "/")[0]
+			return digest
+		}
 	}
 	return ""
 }
 
-// getCacheMarkerPath 获取缓存标记文件路径（隐藏文件）
-func getCacheMarkerPath(cacheKey string) string {
-	cachePath := getCachePath(cacheKey)
-	return cachePath + ".writing"
-}
-
-// getDigestCacheMarkerPath 获取digest缓存标记文件路径
-func getDigestCacheMarkerPath(digest string) string {
-	cachePath := getDigestCachePath(digest)
-	return cachePath + ".writing"
-}
-
-// isCacheWriting 检查缓存是否正在写入中
-func isCacheWriting(cacheKey string) (bool, time.Time) {
-	markerPath := getCacheMarkerPath(cacheKey)
-	data, err := os.ReadFile(markerPath)
-	if err != nil {
-		return false, time.Time{}
+// getCachePath 根据 digest 获取缓存文件路径
+func getCachePath(digest string) string {
+	// 使用前两个字符作为子目录，避免单个目录文件过多
+	if len(digest) < 2 {
+		return filepath.Join(CacheDir, digest)
 	}
-
-	// 解析时间戳
-	var timestamp int64
-	if err := json.Unmarshal(data, &timestamp); err != nil {
-		return false, time.Time{}
-	}
-
-	return true, time.Unix(0, timestamp)
-}
-
-// isDigestCacheWriting 检查digest缓存是否正在写入中
-func isDigestCacheWriting(digest string) (bool, time.Time) {
-	markerPath := getDigestCacheMarkerPath(digest)
-	data, err := os.ReadFile(markerPath)
-	if err != nil {
-		return false, time.Time{}
-	}
-
-	// 解析时间戳
-	var timestamp int64
-	if err := json.Unmarshal(data, &timestamp); err != nil {
-		return false, time.Time{}
-	}
-
-	return true, time.Unix(0, timestamp)
+	subDir := digest[:2]
+	return filepath.Join(CacheDir, subDir, digest)
 }
 
 // readFromCache 从缓存读取响应
-func readFromCache(c *gin.Context, cacheKey string) bool {
+func readFromCache(c *gin.Context) bool {
 	if CacheDir == "" {
 		return false
 	}
 
-	// 确定缓存路径和标记路径
-	digest := extractDigestFromPath(c.Request.URL.Path)
-	var cachePath, markerPath string
-	if digest != "" {
-		cachePath = getDigestCachePath(digest)
-		markerPath = getDigestCacheMarkerPath(digest)
-	} else {
-		cachePath = getCachePath(cacheKey)
-		markerPath = getCacheMarkerPath(cacheKey)
+	// 只缓存 blobs
+	if !isBlobRequest(c.Request.URL.Path) {
+		return false
 	}
 
+	digest := extractDigestFromPath(c.Request.URL.Path)
+	if digest == "" {
+		return false
+	}
+
+	cachePath := getCachePath(digest)
+
 	// 检查缓存文件是否存在
-	info, err := os.Stat(cachePath)
+	_, err := os.Stat(cachePath)
 	if err != nil {
 		return false
 	}
 
-	// 检查写入标记
-	var writing bool
-	var writeTime time.Time
-	if digest != "" {
-		writing, writeTime = isDigestCacheWriting(digest)
-	} else {
-		writing, writeTime = isCacheWriting(cacheKey)
-	}
-
-	if writing {
-		if time.Since(writeTime) > cacheWriteTimeout {
-			log.Printf("WARNING cache write timeout, cleaning up: %s", cachePath)
-			tryRemoveFile(cachePath)
-			tryRemoveFile(markerPath)
+	// 检查临时文件（正在写入中）
+	tmpPath := cachePath + ".tmp"
+	if tmpInfo, err := os.Stat(tmpPath); err == nil {
+		// 如果临时文件存在超过超时时间，清理它
+		if time.Since(tmpInfo.ModTime()) > cacheWriteTimeout {
+			tryRemoveFile(tmpPath)
+		} else {
+			// 正在写入中，跳过缓存
+			return false
 		}
-		return false
-	}
-
-	// 检查非 digest 缓存是否过期（7天）
-	if !isDigestRequest(c.Request.URL.Path) && time.Since(info.ModTime()) > 7*24*time.Hour {
-		tryRemoveFile(cachePath)
-		return false
 	}
 
 	// 读取缓存文件
@@ -346,10 +206,7 @@ func readFromCache(c *gin.Context, cacheKey string) bool {
 	}
 
 	if len(data) == 0 {
-		log.Printf("WARNING cache file is empty, removing: %s", cachePath)
-		if time.Since(info.ModTime()) > 10*time.Minute {
-			tryRemoveFile(cachePath)
-		}
+		tryRemoveFile(cachePath)
 		return false
 	}
 
@@ -361,26 +218,17 @@ func readFromCache(c *gin.Context, cacheKey string) bool {
 	}
 	if err := json.Unmarshal(data, &cachedResp); err != nil {
 		log.Printf("WARNING failed to unmarshal cache (possibly corrupted), removing: %v", err)
-		if time.Since(info.ModTime()) > 10*time.Minute {
-			tryRemoveFile(cachePath)
-		}
+		tryRemoveFile(cachePath)
 		return false
 	}
 
 	// 校验 digest 完整性
-	if isDigestRequest(c.Request.URL.Path) {
-		expectedDigest := extractDigestFromPath(c.Request.URL.Path)
-		if expectedDigest != "" {
-			hash := sha256.Sum256(cachedResp.Body)
-			calculatedDigest := hex.EncodeToString(hash[:])
-			if calculatedDigest != expectedDigest {
-				log.Printf("WARNING cache file digest mismatch, removing: %s (expected: %s, got: %s)", cachePath, expectedDigest, calculatedDigest)
-				if time.Since(info.ModTime()) > 10*time.Minute {
-					tryRemoveFile(cachePath)
-				}
-				return false
-			}
-		}
+	hash := sha256.Sum256(cachedResp.Body)
+	calculatedDigest := hex.EncodeToString(hash[:])
+	if calculatedDigest != digest {
+		log.Printf("WARNING cache file digest mismatch, removing: %s (expected: %s, got: %s)", cachePath, digest, calculatedDigest)
+		tryRemoveFile(cachePath)
+		return false
 	}
 
 	// 设置响应头
@@ -406,57 +254,40 @@ func writeToCacheAsync(body []byte, headers map[string]string, statusCode int, p
 		return
 	}
 
-	// 只缓存 digest 文件（基于内容寻址，永久有效）
-	if !isDigestRequest(path) {
+	// 只缓存 blobs
+	if !isBlobRequest(path) {
 		return
 	}
 
-	// 获取digest值作为文件名
 	digest := extractDigestFromPath(path)
 	if digest == "" {
 		return
 	}
 
-	cachePath := getDigestCachePath(digest)
-	markerPath := getDigestCacheMarkerPath(digest)
+	cachePath := getCachePath(digest)
+	tmpPath := cachePath + ".tmp"
 
-	// 检查缓存文件是否已存在且没有写入标记
+	// 检查缓存文件是否已存在
 	if _, err := os.Stat(cachePath); err == nil {
-		// 检查是否有写入标记
-		if writing, writeTime := isDigestCacheWriting(digest); writing {
-			// 如果标记文件存在超过超时时间，认为之前的写入失败，清理后重新写入
-			if time.Since(writeTime) > cacheWriteTimeout {
-				log.Printf("WARNING previous cache write timeout, cleaning up: %s", cachePath)
-				tryRemoveFile(cachePath)
-				tryRemoveFile(markerPath)
-			} else {
-				// 正在写入中，跳过
-				return
-			}
-		} else {
-			// 文件已存在且没有写入标记，跳过写入
-			return
-		}
+		// 文件已存在，跳过写入
+		return
 	}
 
-	// 创建写入标记文件（隐藏文件，包含时间戳）
-	timestamp := time.Now().UnixNano()
-	markerData, err := json.Marshal(timestamp)
-	if err != nil {
-		log.Printf("WARNING failed to marshal marker: %v", err)
-		return
+	// 检查临时文件（可能正在写入中）
+	if tmpInfo, err := os.Stat(tmpPath); err == nil {
+		// 如果临时文件存在超过超时时间，清理它
+		if time.Since(tmpInfo.ModTime()) > cacheWriteTimeout {
+			tryRemoveFile(tmpPath)
+		} else {
+			// 正在写入中，跳过
+			return
+		}
 	}
 
 	// 创建目录
 	cacheDir := filepath.Dir(cachePath)
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		log.Printf("WARNING failed to create cache directory: %v", err)
-		return
-	}
-
-	// 先创建标记文件
-	if err := os.WriteFile(markerPath, markerData, 0644); err != nil {
-		log.Printf("WARNING failed to create cache marker: %v", err)
 		return
 	}
 
@@ -475,49 +306,24 @@ func writeToCacheAsync(body []byte, headers map[string]string, statusCode int, p
 	data, err := json.Marshal(cachedResp)
 	if err != nil {
 		log.Printf("WARNING failed to marshal cache: %v", err)
-		tryRemoveFile(markerPath) // 清理标记文件
 		return
 	}
 
-	// 直接写入缓存文件
-	file, err := os.OpenFile(cachePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		log.Printf("WARNING failed to create cache file: %v", err)
-		tryRemoveFile(markerPath)
-		return
-	}
-
-	// 写入数据到文件
-	if _, err := file.Write(data); err != nil {
+	// 原子写入：先写入临时文件，然后重命名
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		log.Printf("WARNING failed to write cache file: %v", err)
-		file.Close()
-		tryRemoveFile(cachePath)
-		tryRemoveFile(markerPath)
+		tryRemoveFile(tmpPath)
 		return
 	}
 
-	// 同步到磁盘，确保数据完整性
-	if err := file.Sync(); err != nil {
-		log.Printf("WARNING failed to sync cache file: %v", err)
-		file.Close()
-		tryRemoveFile(cachePath)
-		tryRemoveFile(markerPath)
+	// 原子重命名（在大多数文件系统上是原子操作）
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		log.Printf("WARNING failed to rename cache file: %v", err)
+		tryRemoveFile(tmpPath)
 		return
 	}
 
-	// 关闭文件
-	if err := file.Close(); err != nil {
-		log.Printf("WARNING failed to close cache file: %v", err)
-		tryRemoveFile(markerPath)
-		return
-	}
-
-	// 写入成功，删除标记文件
-	if err := tryRemoveFile(markerPath); err != nil {
-		log.Printf("WARNING failed to remove cache marker: %v", err)
-	}
-
-	debugLog("DEBUG cache MISS, saved to cache: %s", cachePath)
+	debugLog("INFO cache MISS, saved to cache: %s", cachePath)
 }
 
 // tryRemoveFile 尝试删除文件，避免因文件不存在导致的错误日志
@@ -536,8 +342,8 @@ func writeToCache(resp *http.Response) {
 		return
 	}
 
-	// 只缓存 digest 文件（基于内容寻址，永久有效）
-	if !isDigestRequest(resp.Request.URL.Path) {
+	// 只缓存 blobs
+	if !isBlobRequest(resp.Request.URL.Path) {
 		return
 	}
 
@@ -571,8 +377,7 @@ func writeToCache(resp *http.Response) {
 func forward(c *gin.Context) {
 	// 检查缓存（仅对 GET 请求）
 	if c.Request.Method == "GET" && CacheDir != "" {
-		cacheKey := getCacheKey(c.Request)
-		if readFromCache(c, cacheKey) {
+		if readFromCache(c) {
 			return
 		}
 	}
@@ -590,9 +395,6 @@ func forward(c *gin.Context) {
 	}
 
 	// handle proxy request
-	// 创建支持重定向的 HTTP 客户端
-	httpClient := createHTTPClient()
-
 	proxy := httputil.ReverseProxy{
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
 			log.Printf("ERROR proxy error: %v", err)
@@ -622,9 +424,9 @@ func forward(c *gin.Context) {
 			if net.ParseIP(host) != nil {
 				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
 			} else if !strings.Contains(host, ".") {
-				debugLog("DEBUG client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
+				debugLog("INFO client %s request host is a hostname: %s", c.ClientIP(), c.Request.Host)
 			} else {
-				debugLog("DEBUG client %s coming through host %s", c.ClientIP(), c.Request.Host)
+				debugLog("INFO client %s coming through host %s", c.ClientIP(), c.Request.Host)
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
 					log.Printf("WARNING registry not found for %s, using default: %s", c.Request.Host, RegistryMap["default"])
@@ -678,7 +480,7 @@ func forward(c *gin.Context) {
 				reqScheme = "https"
 			}
 
-			debugLog("DEBUG Proxying request: %s %s://%s%s -> %s://%s%s",
+			debugLog("INFO Proxying request: %s %s://%s%s -> %s://%s%s",
 				c.Request.Method,
 				reqScheme,
 				c.Request.Host,
@@ -688,13 +490,9 @@ func forward(c *gin.Context) {
 				req.URL.RequestURI())
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			if resp.StatusCode != http.StatusOK {
-				if resp.StatusCode == http.StatusUnauthorized {
-					// 匿名请求遇到 401 时记录日志
-					log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
-				} else {
-					debugLog("DEBUG proxy received unexpected response: %d %s", resp.StatusCode, resp.Request.URL.String())
-				}
+			// 匿名请求遇到 401 时记录日志
+			if resp.StatusCode == http.StatusUnauthorized {
+				log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
 			}
 
 			// 处理 Www-Authenticate header，修改 realm 地址到本服务
@@ -717,7 +515,7 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				debugLog("DEBUG modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
+				debugLog("INFO modified Www-Authenticate header: %s => %s", wwwAuth, newWWWAuth)
 			}
 
 			// 写入缓存（同步读取响应体，异步写入文件）
@@ -727,10 +525,7 @@ func forward(c *gin.Context) {
 
 			return nil
 		},
-		Transport: &redirectTransport{
-			transport: tr,
-			client:    httpClient,
-		},
+		Transport: tr,
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)
@@ -768,12 +563,10 @@ func main() {
 	var showVersion bool
 	var listen string
 	var registryMapSource string
-	var defaultRegistry string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
-	flag.StringVar(&defaultRegistry, "default-registry", "", "set default registry, more effective than -registry-map, eg. https://registry-1.docker.io")
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.BoolVar(&showVersion, "version", false, "show version")
@@ -795,12 +588,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("ERROR Failed to load registry map: %v", err)
 	}
-
-	if defaultRegistry != "" {
-		RegistryMap["default"] = defaultRegistry
-		log.Printf("WARNING set default registry %s", defaultRegistry)
-	}
-	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
 
 	// 初始化缓存目录
 	if CacheDir != "" {
