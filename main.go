@@ -129,6 +129,68 @@ var tr = &http.Transport{
 	Proxy:                 http.ProxyFromEnvironment,
 }
 
+// redirectTransport 包装 Transport 以支持在代理内部处理重定向
+type redirectTransport struct {
+	transport http.RoundTripper
+}
+
+func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 先执行原始请求
+	resp, err := rt.transport.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果是重定向响应（301, 302, 307, 308），且重定向到不同域名，则在内部跟随
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			redirectURL, err := url.Parse(location)
+			if err != nil {
+				return resp, nil // 返回原始响应，让客户端处理
+			}
+
+			// 如果重定向到不同的域名，在代理内部跟随重定向
+			if redirectURL.Host != req.URL.Host {
+				debugLog("DEBUG redirect to different host detected: %s -> %s, following internally", req.URL.Host, redirectURL.Host)
+
+				// 关闭原始响应体
+				resp.Body.Close()
+
+				// 创建新的重定向请求（不能使用 req.Clone，因为会复制 RequestURI）
+				redirectReq, err := http.NewRequest(req.Method, location, nil)
+				if err != nil {
+					log.Printf("ERROR failed to create redirect request: %v", err)
+					return resp, nil // 返回原始响应
+				}
+
+				// 复制原始请求的头部（除了 Host）
+				for k, v := range req.Header {
+					// 跳过一些不应该复制的头部
+					lowerKey := strings.ToLower(k)
+					if lowerKey != "host" && lowerKey != "connection" {
+						redirectReq.Header[k] = v
+					}
+				}
+
+				// 设置 Host header
+				redirectReq.Host = redirectURL.Host
+
+				// 跟随重定向（使用相同的 Transport）
+				redirectResp, err := rt.transport.RoundTrip(redirectReq)
+				if err != nil {
+					log.Printf("ERROR failed to follow redirect: %v", err)
+					return resp, nil // 返回原始响应
+				}
+
+				return redirectResp, nil
+			}
+		}
+	}
+
+	return resp, nil
+}
+
 // isBlobRequest 检查是否是 blob 请求（只缓存 blobs，不缓存 manifests）
 func isBlobRequest(path string) bool {
 	// 只缓存 blobs（镜像层），不缓存 manifests（清单文件会更新）
@@ -525,7 +587,7 @@ func forward(c *gin.Context) {
 
 			return nil
 		},
-		Transport: tr,
+		Transport: &redirectTransport{transport: tr},
 	}
 
 	proxy.ServeHTTP(c.Writer, c.Request)
