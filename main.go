@@ -94,7 +94,6 @@ func loadRegistryMap(source string) (map[string]string, error) {
 		}
 	}
 
-	debugLog("DEBUG registry-map: available registries: %v", registryMap)
 	return registryMap, nil
 }
 
@@ -612,12 +611,14 @@ func main() {
 	var showVersion bool
 	var listen string
 	var registryMapSource string
+	var defaultRegistry string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
+	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry to use when no domain suffix is configured or when accessing via IP address")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.Parse()
 
@@ -637,6 +638,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("ERROR Failed to load registry map: %v", err)
 	}
+
+	if defaultRegistry != "" {
+		// 验证 default registry URL 格式
+		if _, err := url.Parse(defaultRegistry); err != nil {
+			log.Fatalf("ERROR invalid default-registry URL: %v", err)
+		}
+		RegistryMap["default"] = defaultRegistry
+		log.Printf("INFO default-registry set to: %s", defaultRegistry)
+	}
+	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
 
 	// 初始化缓存目录
 	if CacheDir != "" {
