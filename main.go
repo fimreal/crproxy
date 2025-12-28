@@ -668,6 +668,11 @@ func main() {
 		})
 	})
 
-	log.Printf("INFO server: crproxy listening on %s, domain-suffix=%q", listen, DomainSuffix)
+	log.Printf("INFO crproxy listening on %s", listen)
+	if DomainSuffix != "" {
+		log.Printf("INFO domain-suffix: %q", DomainSuffix)
+	} else {
+		log.Printf("WARNING domain-suffix is not set, using default registry as the solo upstream")
+	}
 	log.Fatal(r.Run(listen))
 }
