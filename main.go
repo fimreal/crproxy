@@ -164,10 +164,12 @@ func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error
 				}
 
 				// 复制原始请求的头部（除了 Host）
+				// 注意：不要复制 Authorization，因为 presigned URL 已经包含了签名，
+				// 额外的 header 会导致签名验证失败（如 Cloudflare R2 等）
 				for k, v := range req.Header {
 					// 跳过一些不应该复制的头部
 					lowerKey := strings.ToLower(k)
-					if lowerKey != "host" && lowerKey != "connection" {
+					if lowerKey != "host" && lowerKey != "connection" && lowerKey != "authorization" {
 						redirectReq.Header[k] = v
 					}
 				}
