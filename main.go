@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/sha512"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
@@ -28,6 +29,8 @@ var version, buildTime string
 const (
 	// cacheWriteTimeout 缓存写入超时时间（5分钟，适合大文件）
 	cacheWriteTimeout = 5 * time.Minute
+	// maxRedirects 最大重定向次数
+	maxRedirects = 10
 )
 
 //go:embed registrymap.json
@@ -134,62 +137,82 @@ type redirectTransport struct {
 }
 
 func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// 先执行原始请求
-	resp, err := rt.transport.RoundTrip(req)
-	if err != nil {
-		return nil, err
-	}
+	// 跟踪重定向次数
+	redirectCount := 0
+	currentReq := req
 
-	// 如果是重定向响应（301, 302, 307, 308），且重定向到不同域名，则在内部跟随
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+	for {
+		// 执行原始请求
+		resp, err := rt.transport.RoundTrip(currentReq)
+		if err != nil {
+			return nil, err
+		}
+
+		// 如果不是重定向响应，直接返回
+		if resp.StatusCode < 300 || resp.StatusCode >= 400 {
+			return resp, nil
+		}
+
 		location := resp.Header.Get("Location")
-		if location != "" {
-			redirectURL, err := url.Parse(location)
-			if err != nil {
-				return resp, nil // 返回原始响应，让客户端处理
-			}
+		if location == "" {
+			return resp, nil
+		}
 
-			// 如果重定向到不同的域名，在代理内部跟随重定向
-			if redirectURL.Host != req.URL.Host {
-				debugLog("DEBUG following redirect: %s -> %s", req.URL.Host, redirectURL.Host)
+		redirectURL, err := url.Parse(location)
+		if err != nil {
+			return resp, nil // 返回原始响应，让客户端处理
+		}
 
-				// 关闭原始响应体
-				resp.Body.Close()
+		// 如果重定向到相同的域名，返回响应让客户端处理
+		if redirectURL.Host == currentReq.URL.Host {
+			return resp, nil
+		}
 
-				// 创建新的重定向请求（不能使用 req.Clone，因为会复制 RequestURI）
-				redirectReq, err := http.NewRequest(req.Method, location, nil)
-				if err != nil {
-					log.Printf("ERROR failed to create redirect request: %v", err)
-					return resp, nil // 返回原始响应
-				}
+		// 检查重定向次数
+		redirectCount++
+		if redirectCount >= maxRedirects {
+			log.Printf("WARNING too many redirects (%d), returning response to client", redirectCount)
+			return resp, nil
+		}
 
-				// 复制原始请求的头部（除了 Host）
-				// 注意：不要复制 Authorization，因为 presigned URL 已经包含了签名，
-				// 额外的 header 会导致签名验证失败（如 Cloudflare R2 等）
-				for k, v := range req.Header {
-					// 跳过一些不应该复制的头部
-					lowerKey := strings.ToLower(k)
-					if lowerKey != "host" && lowerKey != "connection" && lowerKey != "authorization" {
-						redirectReq.Header[k] = v
-					}
-				}
+		debugLog("DEBUG following redirect #%d: %s -> %s", redirectCount, currentReq.URL.Host, redirectURL.Host)
 
-				// 设置 Host header
-				redirectReq.Host = redirectURL.Host
+		// 关闭原始响应体
+		resp.Body.Close()
 
-				// 跟随重定向（使用相同的 Transport）
-				redirectResp, err := rt.transport.RoundTrip(redirectReq)
-				if err != nil {
-					log.Printf("ERROR failed to follow redirect: %v", err)
-					return resp, nil // 返回原始响应
-				}
-
-				return redirectResp, nil
+		// 创建新的重定向请求（不能使用 req.Clone，因为会复制 RequestURI）
+		var body io.Reader
+		// 307和308重定向需要保持原始请求方法和请求体
+		if (resp.StatusCode == http.StatusTemporaryRedirect || resp.StatusCode == http.StatusPermanentRedirect) && currentReq.GetBody != nil {
+			bodyCopy, err := currentReq.GetBody()
+			if err == nil {
+				defer bodyCopy.Close()
+				body = bodyCopy
 			}
 		}
-	}
+		redirectReq, err := http.NewRequest(currentReq.Method, location, body)
+		if err != nil {
+			log.Printf("ERROR failed to create redirect request: %v", err)
+			return resp, nil // 返回原始响应
+		}
 
-	return resp, nil
+		// 复制原始请求的头部（除了 Host）
+		// 注意：不要复制 Authorization，因为 presigned URL 已经包含了签名，
+		// 额外的 header 会导致签名验证失败（如 Cloudflare R2 等）
+		for k, v := range currentReq.Header {
+			// 跳过一些不应该复制的头部
+			lowerKey := strings.ToLower(k)
+			if lowerKey != "host" && lowerKey != "connection" && lowerKey != "authorization" {
+				redirectReq.Header[k] = v
+			}
+		}
+
+		// 设置 Host header
+		redirectReq.Host = redirectURL.Host
+
+		// 继续处理下一次重定向
+		currentReq = redirectReq
+	}
 }
 
 // isBlobRequest 检查是否是 blob 请求（只缓存 blobs，不缓存 manifests）
@@ -199,20 +222,21 @@ func isBlobRequest(path string) bool {
 		strings.Contains(path, "/blobs/sha512:")
 }
 
-// extractDigestFromPath 从路径中提取 digest 值
-func extractDigestFromPath(path string) string {
+// extractDigestFromPath 从路径中提取 digest 算法和值
+func extractDigestFromPath(path string) (algorithm string, digest string) {
 	// 提取 sha256:<digest> 或 sha512:<digest>
 	for _, prefix := range []string{"sha256:", "sha512:"} {
 		idx := strings.Index(path, prefix)
 		if idx != -1 {
-			digest := path[idx+len(prefix):]
+			algorithm = strings.TrimSuffix(prefix, ":")
+			digest = path[idx+len(prefix):]
 			// 去掉可能的查询参数和路径分隔符
 			digest = strings.Split(digest, "?")[0]
 			digest = strings.Split(digest, "/")[0]
-			return digest
+			return algorithm, digest
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // getCachePath 根据 digest 获取缓存文件路径
@@ -236,7 +260,7 @@ func readFromCache(c *gin.Context) bool {
 		return false
 	}
 
-	digest := extractDigestFromPath(c.Request.URL.Path)
+	algorithm, digest := extractDigestFromPath(c.Request.URL.Path)
 	if digest == "" {
 		return false
 	}
@@ -286,8 +310,20 @@ func readFromCache(c *gin.Context) bool {
 	}
 
 	// 校验 digest 完整性
-	hash := sha256.Sum256(cachedResp.Body)
-	calculatedDigest := hex.EncodeToString(hash[:])
+	var calculatedDigest string
+	switch algorithm {
+	case "sha256":
+		hash := sha256.Sum256(cachedResp.Body)
+		calculatedDigest = hex.EncodeToString(hash[:])
+	case "sha512":
+		hash := sha512.Sum512(cachedResp.Body)
+		calculatedDigest = hex.EncodeToString(hash[:])
+	default:
+		// 不支持的算法，不使用缓存
+		log.Printf("WARNING unsupported digest algorithm: %s", algorithm)
+		tryRemoveFile(cachePath)
+		return false
+	}
 	if calculatedDigest != digest {
 		log.Printf("WARNING cache file digest mismatch, removing: %s (expected: %s, got: %s)", cachePath, digest, calculatedDigest)
 		tryRemoveFile(cachePath)
@@ -322,7 +358,7 @@ func writeToCacheAsync(body []byte, headers map[string]string, statusCode int, p
 		return
 	}
 
-	digest := extractDigestFromPath(path)
+	_, digest := extractDigestFromPath(path)
 	if digest == "" {
 		return
 	}
@@ -502,10 +538,20 @@ func forward(c *gin.Context) {
 				upstream := req.URL.Path[len("/token/"):]
 				u, err := url.Parse(upstream)
 				if err != nil {
-					log.Printf("ERROR failed to parse token URL: %v", err)
-					req.URL.Scheme = "invalid"
-					req.URL.Host = "invalid"
-					return
+					// 尝试修复被Nginx合并斜杠的URL：把 https:/xxx 变成 https://xxx
+					if strings.HasPrefix(upstream, "http:/") && !strings.HasPrefix(upstream, "http://") {
+						upstream = "http://" + upstream[len("http:/"):]
+						u, err = url.Parse(upstream)
+					} else if strings.HasPrefix(upstream, "https:/") && !strings.HasPrefix(upstream, "https://") {
+						upstream = "https://" + upstream[len("https:/"):]
+						u, err = url.Parse(upstream)
+					}
+					if err != nil {
+						log.Printf("ERROR failed to parse token URL: %v", err)
+						req.URL.Scheme = "invalid"
+						req.URL.Host = "invalid"
+						return
+					}
 				}
 				// 验证 URL scheme，只允许 http 和 https
 				if u.Scheme != "http" && u.Scheme != "https" {
