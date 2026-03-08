@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
 	_ "embed"
@@ -11,7 +12,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -41,6 +42,39 @@ const (
 	tmpSuffix = ".tmp"
 )
 
+// 日志级别
+var logLevel = new(slog.LevelVar)
+
+// initLogger 初始化结构化日志
+func initLogger() {
+	opts := &slog.HandlerOptions{Level: logLevel}
+	handler := slog.NewJSONHandler(os.Stdout, opts)
+	slog.SetDefault(slog.New(handler))
+}
+
+// setLogLevel 设置日志级别
+func setLogLevel(level string) {
+	switch strings.ToLower(level) {
+	case "debug":
+		logLevel.Set(slog.LevelDebug)
+	case "info":
+		logLevel.Set(slog.LevelInfo)
+	case "warn", "warning":
+		logLevel.Set(slog.LevelWarn)
+	case "error":
+		logLevel.Set(slog.LevelError)
+	default:
+		logLevel.Set(slog.LevelInfo)
+	}
+}
+
+// generateRequestID 生成请求 ID
+func generateRequestID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 //go:embed registrymap.json
 var embedRegistryMap []byte
 
@@ -65,7 +99,7 @@ func loadRegistryMap(source string) (map[string]string, error) {
 	// 如果没有指定源，则使用内置的 RegistryMap
 	if source == "" {
 		data = embedRegistryMap
-		log.Printf("INFO registry-map: using built-in registry map")
+		slog.Info("using built-in registry map")
 	} else {
 		// 从外部源加载 RegistryMap
 		client := &http.Client{Timeout: 30 * time.Second}
@@ -80,7 +114,7 @@ func loadRegistryMap(source string) (map[string]string, error) {
 			if resp.StatusCode != http.StatusOK {
 				return nil, fmt.Errorf("ERROR HTTP %d: %s", resp.StatusCode, resp.Status)
 			}
-			log.Printf("INFO registry-map: loaded registry map from URL: %s", source)
+			slog.Info("loaded registry map from URL", "source", source)
 			data, err = io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("ERROR failed to read response body: %v", err)
@@ -91,7 +125,7 @@ func loadRegistryMap(source string) (map[string]string, error) {
 			if err != nil {
 				return nil, fmt.Errorf("ERROR failed to read registry map file %s: %v", source, err)
 			}
-			log.Printf("INFO registry-map: loaded registry map from file: %s", source)
+			slog.Info("registry-map: loaded registry map from file", "source", source)
 		}
 	}
 
@@ -207,11 +241,11 @@ func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error
 		// 检查重定向次数
 		redirectCount++
 		if redirectCount >= maxRedirects {
-			log.Printf("WARNING too many redirects (%d), returning response to client", redirectCount)
+			slog.Warn("too many redirects, returning response to client", "count", redirectCount)
 			return resp, nil
 		}
 
-		debugLog("DEBUG following redirect #%d: %s -> %s", redirectCount, currentReq.URL.Host, redirectURL.Host)
+		debugLog("following redirect", "count", redirectCount, "from", currentReq.URL.Host, "to", redirectURL.Host)
 
 		// 关闭原始响应体
 		resp.Body.Close()
@@ -228,7 +262,7 @@ func (rt *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error
 		}
 		redirectReq, err := http.NewRequest(currentReq.Method, location, body)
 		if err != nil {
-			log.Printf("ERROR failed to create redirect request: %v", err)
+			slog.Error("failed to create redirect request", "error", err)
 			return resp, nil // 返回原始响应
 		}
 
@@ -335,7 +369,7 @@ func readFromCache(c *gin.Context) bool {
 
 	var meta CacheMeta
 	if err := json.Unmarshal(metaData, &meta); err != nil {
-		log.Printf("WARNING failed to unmarshal cache meta: %v", err)
+		slog.Warn("failed to unmarshal cache meta", "error", err)
 		tryRemoveFile(metaPath)
 		tryRemoveFile(blobPath)
 		return false
@@ -343,7 +377,7 @@ func readFromCache(c *gin.Context) bool {
 
 	// 验证 digest 是否匹配
 	if meta.Digest != digest {
-		log.Printf("WARNING cache digest mismatch: expected %s, got %s", digest, meta.Digest)
+		slog.Warn("cache digest mismatch", "expected", digest, "got", meta.Digest)
 		tryRemoveFile(metaPath)
 		tryRemoveFile(blobPath)
 		return false
@@ -359,7 +393,7 @@ func readFromCache(c *gin.Context) bool {
 	// 打开 blob 文件进行流式传输
 	blobFile, err := os.Open(blobPath)
 	if err != nil {
-		log.Printf("WARNING failed to open cache blob: %v", err)
+		slog.Warn("failed to open cache blob", "error", err)
 		return false
 	}
 	defer blobFile.Close()
@@ -657,7 +691,7 @@ func finishCacheWrite(digest string, cw *cacheWriter) {
 
 	// 刷新并关闭写入器
 	if err := cw.writer.Flush(); err != nil {
-		log.Printf("WARNING failed to flush cache: %v", err)
+		slog.Warn("failed to flush cache", "error", err)
 		tryRemoveFile(cw.tmpPath)
 		return
 	}
@@ -666,7 +700,7 @@ func finishCacheWrite(digest string, cw *cacheWriter) {
 	// 验证哈希
 	calculatedDigest := cw.writer.Digest()
 	if calculatedDigest != cw.digest {
-		log.Printf("WARNING cache digest mismatch: expected %s, got %s", cw.digest, calculatedDigest)
+		slog.Warn("cache digest mismatch", "expected", cw.digest, "got", calculatedDigest)
 		tryRemoveFile(cw.tmpPath)
 		return
 	}
@@ -683,14 +717,14 @@ func finishCacheWrite(digest string, cw *cacheWriter) {
 
 	metaData, err := json.Marshal(meta)
 	if err != nil {
-		log.Printf("WARNING failed to marshal cache meta: %v", err)
+		slog.Warn("failed to marshal cache meta", "error", err)
 		tryRemoveFile(cw.tmpPath)
 		return
 	}
 
 	tmpMetaPath := cw.metaPath + tmpSuffix
 	if err := os.WriteFile(tmpMetaPath, metaData, 0644); err != nil {
-		log.Printf("WARNING failed to write cache meta: %v", err)
+		slog.Warn("failed to write cache meta", "error", err)
 		tryRemoveFile(cw.tmpPath)
 		tryRemoveFile(tmpMetaPath)
 		return
@@ -698,13 +732,13 @@ func finishCacheWrite(digest string, cw *cacheWriter) {
 
 	// 原子重命名
 	if err := os.Rename(cw.tmpPath, cw.blobPath); err != nil {
-		log.Printf("WARNING failed to rename cache blob: %v", err)
+		slog.Warn("failed to rename cache blob", "error", err)
 		tryRemoveFile(cw.tmpPath)
 		tryRemoveFile(tmpMetaPath)
 		return
 	}
 	if err := os.Rename(tmpMetaPath, cw.metaPath); err != nil {
-		log.Printf("WARNING failed to rename cache meta: %v", err)
+		slog.Warn("failed to rename cache meta", "error", err)
 		tryRemoveFile(cw.metaPath)
 	}
 
@@ -724,7 +758,7 @@ func forward(c *gin.Context) {
 	if DomainSuffix != "" && strings.Contains(c.Request.Host, DomainSuffix) {
 		_, err := findRegistryURL(c.Request.Host)
 		if err != nil {
-			log.Printf("ERROR registry not found for host %s: %v", c.Request.Host, err)
+			slog.Error("registry not found for host", "host", c.Request.Host, "error", err)
 			c.JSON(http.StatusNotFound, gin.H{
 				"message": fmt.Sprintf("registry not found: %s, please visit /help for available registries", c.Request.Host),
 			})
@@ -735,7 +769,7 @@ func forward(c *gin.Context) {
 	// handle proxy request
 	proxy := httputil.ReverseProxy{
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
-			log.Printf("ERROR proxy error: %v", err)
+			slog.Error("proxy error", "error", err)
 			rw.WriteHeader(http.StatusBadGateway)
 			fmt.Fprintf(rw, "Bad Gateway: %v", err)
 		},
@@ -743,7 +777,7 @@ func forward(c *gin.Context) {
 			// 初始化请求的基本信息, 默认使用默认registry
 			defaultURL, err := getURLCached(RegistryMap["default"])
 			if err != nil {
-				log.Printf("ERROR failed to parse default registry URL: %v", err)
+				slog.Error("failed to parse default registry URL", "error", err)
 				// 设置一个无效的 URL，让代理返回错误
 				req.URL.Scheme = "invalid"
 				req.URL.Host = "invalid"
@@ -760,11 +794,11 @@ func forward(c *gin.Context) {
 			}
 
 			if net.ParseIP(host) != nil {
-				log.Printf("WARNING client %s request host is IP address %s, use default upstream: %s", c.ClientIP(), c.Request.Host, RegistryMap["default"])
+				slog.Warn("client request host is IP address, using default upstream", "client_ip", c.ClientIP(), "host", c.Request.Host, "upstream", RegistryMap["default"])
 			} else {
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
-					log.Printf("WARNING registry not found for %s, using default: %s", c.Request.Host, RegistryMap["default"])
+					slog.Warn("registry not found, using default", "host", c.Request.Host, "default", RegistryMap["default"])
 				} else {
 					req.URL.Scheme = u.Scheme
 					req.URL.Host = u.Host
@@ -786,7 +820,7 @@ func forward(c *gin.Context) {
 						u, err = url.Parse(upstream)
 					}
 					if err != nil {
-						log.Printf("ERROR failed to parse token URL: %v", err)
+						slog.Error("failed to parse token URL", "error", err)
 						req.URL.Scheme = "invalid"
 						req.URL.Host = "invalid"
 						return
@@ -794,14 +828,14 @@ func forward(c *gin.Context) {
 				}
 				// 验证 URL scheme，只允许 http 和 https
 				if u.Scheme != "http" && u.Scheme != "https" {
-					log.Printf("ERROR invalid token URL scheme: %s", u.Scheme)
+					slog.Error("invalid token URL scheme", "scheme", u.Scheme)
 					req.URL.Scheme = "invalid"
 					req.URL.Host = "invalid"
 					return
 				}
 				// 验证 Host 不为空
 				if u.Host == "" {
-					log.Printf("ERROR token URL has empty host")
+					slog.Error("token URL has empty host")
 					req.URL.Scheme = "invalid"
 					req.URL.Host = "invalid"
 					return
@@ -827,14 +861,14 @@ func forward(c *gin.Context) {
 		ModifyResponse: func(resp *http.Response) error {
 			// 匿名请求遇到 401 时记录日志
 			if resp.StatusCode == http.StatusUnauthorized {
-				log.Printf("WARNING proxy received 401 Unauthorized: %s", resp.Request.URL.String())
+				slog.Warn("proxy received 401 Unauthorized", "url", resp.Request.URL.String())
 			}
 
 			// 处理 Www-Authenticate header，修改 realm 地址到本服务
 			if wwwAuth := resp.Header.Get("Www-Authenticate"); wwwAuth != "" {
 				realmURL, ok := getRealm(wwwAuth)
 				if !ok {
-					log.Printf("ERROR failed to extract realm from Www-Authenticate header: %v", wwwAuth)
+					slog.Error("failed to extract realm from Www-Authenticate header", "arg1", wwwAuth)
 					return nil
 				}
 
@@ -887,9 +921,59 @@ func replaceRealm(header, newRealm string) string {
 // Debug 是否开启调试日志（通过环境变量 DEBUG 控制）
 var Debug = os.Getenv("DEBUG") == "1"
 
-func debugLog(format string, args ...interface{}) {
+func debugLog(msg string, args ...any) {
 	if Debug {
-		log.Printf(format, args...)
+		slog.Debug(msg, args...)
+	}
+}
+
+// requestIDMiddleware 请求 ID 中间件
+func requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID := c.GetHeader("X-Request-ID")
+		if requestID == "" {
+			requestID = generateRequestID()
+		}
+		c.Set("requestID", requestID)
+		c.Header("X-Request-ID", requestID)
+		c.Next()
+	}
+}
+
+// accessLogMiddleware 访问日志中间件
+func accessLogMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		query := c.Request.URL.RawQuery
+
+		// 处理请求
+		c.Next()
+
+		// 记录访问日志
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		size := c.Writer.Size()
+		requestID, _ := c.Get("requestID")
+		cacheStatus := c.Writer.Header().Get("X-Cache")
+		if cacheStatus == "" {
+			cacheStatus = "BYPASS"
+		}
+
+		// 只记录重要的请求（排除 healthz 等）
+		if path != "/healthz" {
+			slog.Info("request",
+				"request_id", requestID,
+				"method", c.Request.Method,
+				"path", path,
+				"query", query,
+				"status", status,
+				"latency_ms", latency.Milliseconds(),
+				"size", size,
+				"client_ip", c.ClientIP(),
+				"cache", cacheStatus,
+			)
+		}
 	}
 }
 
@@ -899,6 +983,7 @@ func main() {
 	var listen string
 	var registryMapSource string
 	var defaultRegistry string
+	var logLevelStr string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
@@ -907,7 +992,12 @@ func main() {
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry to use when no domain suffix is configured or when accessing via IP address")
 	flag.BoolVar(&showVersion, "version", false, "show version")
+	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.Parse()
+
+	// 初始化日志
+	initLogger()
+	setLogLevel(logLevelStr)
 
 	if showVersion {
 		fmt.Printf("version: %s, build time: %s\n", version, buildTime)
@@ -923,37 +1013,41 @@ func main() {
 	var err error
 	RegistryMap, err = loadRegistryMap(registryMapSource)
 	if err != nil {
-		log.Fatalf("ERROR Failed to load registry map: %v", err)
+		slog.Error("Failed to load registry map", "error", err)
+		os.Exit(1)
 	}
 
 	if defaultRegistry != "" {
 		// 验证 default registry URL 格式
 		if _, err := url.Parse(defaultRegistry); err != nil {
-			log.Fatalf("ERROR invalid default-registry URL: %v", err)
+			slog.Error("invalid default-registry URL", "error", err)
+			os.Exit(1)
 		}
 		RegistryMap["default"] = defaultRegistry
-		log.Printf("INFO default-registry set to: %s", defaultRegistry)
+		slog.Info("default-registry set", "registry", defaultRegistry)
 	}
 	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
 
 	// 初始化缓存目录
 	if CacheDir != "" {
 		if err := os.MkdirAll(CacheDir, 0755); err != nil {
-			log.Fatalf("ERROR failed to create cache directory %s: %v", CacheDir, err)
+			slog.Error("failed to create cache directory", "cache_dir", CacheDir, "error", err)
+			os.Exit(1)
 		}
 
 		// 获取缓存目录锁，防止多实例共享
 		releaseLock, err := acquireCacheLock()
 		if err != nil {
-			log.Fatalf("ERROR %v", err)
+			slog.Error("cache lock failed", "error", err)
+			os.Exit(1)
 		}
 		defer releaseLock()
 
-		log.Printf("INFO cache: enabled, cache directory: %s", CacheDir)
+		slog.Info("cache enabled", "cache_dir", CacheDir)
 		// 启动缓存清理器（清理崩溃遗留的临时文件）
 		startCacheCleaner()
 	} else {
-		log.Printf("INFO cache: disabled")
+		slog.Info("cache disabled")
 	}
 
 	if !Debug {
@@ -962,12 +1056,13 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(requestIDMiddleware())
+	r.Use(accessLogMiddleware())
 
 	r.Any("/v2/*path", forward)
 	r.Any("/token/*path", forward)
 
 	r.GET("/help", func(c *gin.Context) {
-		log.Printf("INFO client %s request help information", c.ClientIP())
 		c.JSON(http.StatusOK, RegistryMap)
 	})
 	r.GET("/healthz", func(c *gin.Context) {
@@ -976,11 +1071,15 @@ func main() {
 		})
 	})
 
-	log.Printf("INFO crproxy listening on %s", listen)
+	slog.Info("crproxy listening", "address", listen)
 	if DomainSuffix != "" {
-		log.Printf("INFO domain-suffix: %q", DomainSuffix)
+		slog.Info("domain-suffix configured", "suffix", DomainSuffix)
 	} else {
-		log.Printf("WARNING domain-suffix is not set, using default registry as the solo upstream")
+		slog.Warn("domain-suffix is not set, using default registry as the solo upstream")
 	}
-	log.Fatal(r.Run(listen))
+	if err := r.Run(listen); err != nil {
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
+	}
 }
+
