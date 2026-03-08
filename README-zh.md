@@ -6,12 +6,13 @@
 - 基于域名的多仓库代理（支持 docker.io、gcr.io、quay.io 等）
 - 自动 Bearer token 认证和代理
 - 自动重定向跟随（内部处理 307 重定向）
-- 本地缓存支持（仅缓存镜像层 blobs，不缓存清单 manifests）
-- 信息/调试日志输出，通过 `DEBUG` 环境变量控制日志级别
+- 本地缓存支持，使用流式 I/O（内存占用低）
+- 结构化 JSON 日志，支持请求追踪和可配置日志级别
 - 支持二进制和 Docker 部署
 - 通过命令行参数简单配置
 - 健康检查端点 (`/healthz`)
 - 仓库信息端点 (`/help`)
+- 支持 SHA256 和 SHA512 摘要算法
 
 ## 快速开始
 
@@ -45,15 +46,34 @@ docker run -it --rm -p 8080:8080 \
   crproxy -listen=:8080 -cache-dir=/cache
 ```
 
-### 启用调试日志
+### 配置日志级别
+
 ```sh
-# 设置 DEBUG 环境变量以启用详细日志
+# 通过命令行设置日志级别（debug, info, warn, error）
+crproxy -listen=:8080 -log-level=debug
+
+# 或使用 DEBUG 环境变量（向后兼容）
 DEBUG=1 crproxy -listen=:8080
 ```
 
 ## 配置镜像仓库
 
 通过 [registrymap.json](registrymap.json) 配置镜像仓库映射关系，支持本地文件或者 URL 在启动时配置。
+
+### 单个仓库快速启动
+
+如果只需要代理单个镜像仓库，可以直接使用 `-default-registry` 参数，无需创建配置文件：
+
+```bash
+# 仅代理 registry.k8s.io
+crproxy -default-registry=https://registry.k8s.io -listen=:5000
+
+# 直接拉取镜像
+docker pull 127.0.0.1:5000/pause:3.9
+docker pull 127.0.0.1:5000/kube-apiserver:v1.28.0
+```
+
+### 多仓库配置示例
 
 示例 `registrymap.json`：
 ```json
@@ -128,6 +148,7 @@ docker pull docker.mydomain.com/library/nginx:latest
 | `-registry-map`  | (嵌入)              | registry 映射文件路径或 URL。默认为嵌入的 `registrymap.json` |
 | `-default-registry` | (空)            | 默认仓库 URL，当未配置域名后缀或通过 IP 地址访问时使用。会覆盖 registry map 中的 `default` 键 |
 | `-cache-dir`     | (空)                | 本地缓存目录，用于缓存镜像层。如果为空则禁用缓存。仅缓存 blobs，不缓存 manifests |
+| `-log-level`     | `info`              | 日志级别：debug, info, warn, error |
 | `-help`          | -                   | 显示帮助信息                               |
 | `-version`       | -                   | 显示版本和构建时间                         |
 
@@ -135,7 +156,7 @@ docker pull docker.mydomain.com/library/nginx:latest
 
 | 变量 | 说明 |
 |------|------|
-| `DEBUG` | 设置为 `1` 以启用调试日志。显示详细的请求/响应信息、重定向和缓存操作 |
+| `DEBUG` | 设置为 `1` 以启用调试日志（向后兼容）。等同于 `-log-level=debug` |
 | `http_proxy` / `https_proxy` | 可选，用于出站连接的代理设置 |
 
 ## API 端点
@@ -151,13 +172,28 @@ docker pull docker.mydomain.com/library/nginx:latest
 
 **重要说明：**
 - 仅缓存 blobs（镜像层），不缓存 manifests（清单文件），确保始终获取最新的清单
-- 缓存基于内容寻址存储，使用 SHA256 摘要
+- 缓存基于内容寻址存储，使用 SHA256 或 SHA512 摘要
 - 在提供缓存内容之前会验证完整性
-- 缓存异步写入，避免阻塞响应
+- 使用流式 I/O 写入缓存，最小化内存占用
+- 支持并发缓存写入，不阻塞响应
 
 ## 重定向处理
 
 crproxy 会自动在内部处理 HTTP 重定向（301, 302, 307, 308）。当仓库返回重定向到不同域名时（例如 Docker Hub 重定向到 Cloudflare CDN），crproxy 会在服务端跟随重定向，因此客户端无需直接请求重定向的 URL。
+
+## 结构化日志
+
+crproxy 使用结构化 JSON 日志，支持请求追踪：
+
+- 每个请求分配唯一请求 ID（通过 `X-Request-ID` 头）
+- 所有日志以 JSON 格式输出，便于解析和聚合
+- 可配置日志级别：`debug`、`info`、`warn`、`error`
+- 访问日志包含详细信息：方法、路径、状态码、延迟、客户端 IP、缓存状态
+
+示例日志输出：
+```json
+{"time":"2024-01-15T10:30:45.123Z","level":"INFO","msg":"request","request_id":"a1b2c3d4e5f6","method":"GET","path":"/v2/library/alpine/manifests/latest","status":200,"latency_ms":45,"size":1024,"client_ip":"192.168.1.100","cache":"HIT"}
+```
 
 ## 多架构构建
 
