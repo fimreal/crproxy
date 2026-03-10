@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1280,9 +1281,142 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 	}
 }
 
+// GitHubRelease GitHub release 信息
+type GitHubRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name string `json:"name"`
+		URL  string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+// updateSelf 自升级到最新版本
+func updateSelf() error {
+	const repo = "fimreal/crproxy"
+
+	// 获取当前可执行文件路径
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	slog.Info("checking for updates", "current_version", version, "executable", execPath)
+
+	// 获取最新 release 信息
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to fetch releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return fmt.Errorf("failed to parse release info: %w", err)
+	}
+
+	latestVersion := release.TagName
+	slog.Info("latest version available", "version", latestVersion)
+
+	// 检查是否需要更新
+	if latestVersion == version {
+		fmt.Printf("✅ Already at the latest version: %s\n", version)
+		return nil
+	}
+
+	// 确定平台和架构
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	// 构建文件名
+	assetName := fmt.Sprintf("crproxy-%s-%s", goos, goarch)
+	if goos == "windows" {
+		assetName += ".exe"
+	}
+
+	// 查找对应的资源
+	var downloadURL string
+	for _, asset := range release.Assets {
+		if asset.Name == assetName {
+			downloadURL = asset.URL
+			break
+		}
+	}
+
+	if downloadURL == "" {
+		return fmt.Errorf("no binary found for %s/%s (looking for %s)", goos, goarch, assetName)
+	}
+
+	slog.Info("downloading new version", "url", downloadURL, "asset", assetName)
+
+	// 下载新版本
+	downloadResp, err := http.Get(downloadURL)
+	if err != nil {
+		return fmt.Errorf("failed to download binary: %w", err)
+	}
+	defer downloadResp.Body.Close()
+
+	if downloadResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status %d", downloadResp.StatusCode)
+	}
+
+	// 创建临时文件
+	tmpFile := execPath + ".new"
+	out, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	// 复制文件内容
+	if _, err := io.Copy(out, downloadResp.Body); err != nil {
+		out.Close()
+		os.Remove(tmpFile)
+		return fmt.Errorf("failed to write binary: %w", err)
+	}
+	out.Close()
+
+	// 备份旧版本
+	backupPath := execPath + ".backup"
+	if _, err := os.Stat(execPath); err == nil {
+		if err := os.Rename(execPath, backupPath); err != nil {
+			os.Remove(tmpFile)
+			return fmt.Errorf("failed to backup old binary: %w", err)
+		}
+		slog.Info("backup created", "path", backupPath)
+	}
+
+	// 替换为新版本
+	if err := os.Rename(tmpFile, execPath); err != nil {
+		// 恢复备份
+		if _, err := os.Stat(backupPath); err == nil {
+			os.Rename(backupPath, execPath)
+		}
+		os.Remove(tmpFile)
+		return fmt.Errorf("failed to replace binary: %w", err)
+	}
+
+	fmt.Printf("✅ Successfully updated to version %s\n", latestVersion)
+	fmt.Printf("📁 Backup saved to: %s\n", backupPath)
+	fmt.Println("⚠️  Please restart the service to use the new version")
+
+	return nil
+}
+
 func main() {
 	var help bool
 	var showVersion bool
+	var doUpdate bool
 	var listen string
 	var registryMapSource string
 	var defaultRegistry string
@@ -1298,6 +1432,7 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.StringVar(&configFile, "config-file", "", "configuration file path (default: ./crproxy-config.json)")
+	flag.BoolVar(&doUpdate, "update", false, "update to latest version from GitHub releases")
 	flag.Parse()
 
 	// 初始化日志
@@ -1311,6 +1446,15 @@ func main() {
 
 	if help {
 		flag.Usage()
+		return
+	}
+
+	// 自升级
+	if doUpdate {
+		if err := updateSelf(); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Update failed: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 

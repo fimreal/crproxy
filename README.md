@@ -8,6 +8,8 @@ A universal container image registry proxy that supports domain-based routing.
 - Automatic redirect following (handles 307 redirects internally)
 - Local cache support for image blobs with streaming I/O (low memory usage)
 - Structured JSON logging with request tracing and configurable log levels
+- Web-based admin interface with token authentication
+- Self-update capability from GitHub releases
 - Supports both binary and Docker deployment
 - Simple configuration via command line arguments
 - Health check endpoint (`/healthz`)
@@ -55,6 +57,24 @@ crproxy -listen=:8080 -log-level=debug
 # Or use DEBUG environment variable for backward compatibility
 DEBUG=1 crproxy -listen=:8080
 ```
+
+### Self-Update
+
+Update to the latest version from GitHub releases:
+
+```sh
+# Check and update to the latest stable version
+crproxy -update
+
+# The old binary will be backed up as crproxy.backup
+# Restart the service to use the new version
+```
+
+Features:
+- Downloads the correct binary for your OS and architecture
+- Automatically backs up the old version
+- Only updates to stable releases (no pre-releases)
+- Verifies if already at the latest version
 
 ## Configure Image Registries
 
