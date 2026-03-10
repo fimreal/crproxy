@@ -217,7 +217,7 @@
         .card-header {
             display: flex;
             justify-content: space-between;
-            align-items:: center;
+            align-items: center;
             margin-bottom: 24px;
             padding-bottom: 16px;
             border-bottom: 2px solid var(--gray-100);
@@ -310,13 +310,13 @@
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 24px;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 0;
         }
 
         .form-group label {
@@ -325,6 +325,7 @@
             font-weight: 600;
             color: var(--gray-700);
             font-size: 14px;
+            min-height: 22px;
         }
 
         .form-group input,
@@ -335,6 +336,7 @@
             border-radius: 8px;
             font-size: 14px;
             transition: all 0.3s;
+            height: 46px;
         }
 
         .form-group input:focus,
@@ -347,6 +349,11 @@
         .form-group input[readonly] {
             background: var(--gray-100);
             cursor: not-allowed;
+        }
+
+        .form-group .btn {
+            height: 46px;
+            min-width: 120px;
         }
 
         .stats-grid {
@@ -563,6 +570,11 @@
                 border-left-color: var(--primary);
             }
         }
+
+        /* 确保 toast 支持多行 */
+        .toast {
+            white-space: pre-line;
+        }
     </style>
 </head>
 <body>
@@ -616,16 +628,16 @@
                     </table>
 
                     <h3 style="margin: 24px 0 16px 0; color: var(--gray-800);">添加新映射</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
+                    <div class="form-grid" style="grid-template-columns: 1fr 2fr auto; gap: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label>名称</label>
                             <input type="text" id="new-registry-name" placeholder="例如: gcr">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label>URL</label>
                             <input type="text" id="new-registry-url" placeholder="例如: https://gcr.io">
                         </div>
-                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
                             <button class="btn btn-primary" onclick="addRegistry()">➕ 添加</button>
                         </div>
                     </div>
@@ -645,6 +657,8 @@
                                 <label>域名后缀</label>
                                 <input type="text" id="domain-suffix" placeholder="例如: mydomain.com">
                             </div>
+                        </div>
+                        <div class="form-grid">
                             <div class="form-group">
                                 <label>日志级别</label>
                                 <select id="log-level">
@@ -655,8 +669,8 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>缓存目录 <span class="badge badge-primary">只读</span></label>
-                                <input type="text" id="cache-dir" readonly>
+                                <label>缓存目录 <span class="badge badge-primary">需重启生效</span></label>
+                                <input type="text" id="cache-dir" placeholder="/path/to/cache">
                             </div>
                         </div>
                         <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
@@ -813,10 +827,13 @@
 
         // 保存配置
         async function saveConfig() {
+            const cacheDir = document.getElementById('cache-dir').value;
+
             const config = {
                 defaultRegistry: document.getElementById('default-registry').value,
                 domainSuffix: document.getElementById('domain-suffix').value,
                 logLevel: document.getElementById('log-level').value,
+                cacheDir: cacheDir,
             };
 
             try {
@@ -832,7 +849,11 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('✅ 配置已保存并实时生效', 'success');
+                    let message = '✅ 配置已保存并实时生效';
+                    if (cacheDir && cacheDir !== '(未启用)') {
+                        message += '\n⚠️ 缓存目录修改需要重启服务才能生效';
+                    }
+                    showToast(message, 'success');
                     loadConfig();
                 } else {
                     showToast(data.error || '保存失败', 'error');
