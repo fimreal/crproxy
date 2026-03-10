@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	_ "embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -22,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -77,6 +79,9 @@ func generateRequestID() string {
 
 //go:embed registrymap.json
 var embedRegistryMap []byte
+
+//go:embed admin/index.html
+var adminHTML []byte
 
 // RegistryMap 镜像仓库地址
 var RegistryMap map[string]string
@@ -154,6 +159,239 @@ func loadRegistryMap(source string) (map[string]string, error) {
 
 var DomainSuffix string
 var CacheDir string
+
+// Config 动态配置结构
+type Config struct {
+	RegistryMap     map[string]string `json:"registryMap"`
+	DefaultRegistry string            `json:"defaultRegistry"`
+	DomainSuffix    string            `json:"domainSuffix"`
+	LogLevel        string            `json:"logLevel"`
+	CacheDir        string            `json:"cacheDir"`
+	Listen          string            `json:"listen"`
+}
+
+// ConfigManager 配置管理器（线程安全）
+type ConfigManager struct {
+	mu       sync.RWMutex
+	config   Config
+	filePath string
+}
+
+// NewConfigManager 创建配置管理器
+func NewConfigManager(filePath string) *ConfigManager {
+	return &ConfigManager{
+		filePath: filePath,
+		config:   Config{RegistryMap: make(map[string]string)},
+	}
+}
+
+// GetConfig 获取当前配置（返回副本）
+func (cm *ConfigManager) GetConfig() Config {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	// 返回副本，避免外部修改
+	config := cm.config
+	config.RegistryMap = make(map[string]string)
+	for k, v := range cm.config.RegistryMap {
+		config.RegistryMap[k] = v
+	}
+	return config
+}
+
+// UpdateConfig 更新配置
+func (cm *ConfigManager) UpdateConfig(newConfig Config) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// 验证配置
+	if newConfig.DefaultRegistry != "" {
+		if _, err := url.Parse(newConfig.DefaultRegistry); err != nil {
+			return fmt.Errorf("invalid default-registry URL: %w", err)
+		}
+	}
+
+	// 验证 RegistryMap 中的 URL
+	for name, registryURL := range newConfig.RegistryMap {
+		if _, err := url.Parse(registryURL); err != nil {
+			return fmt.Errorf("invalid registry URL for %s: %w", name, err)
+		}
+	}
+
+	// 更新内存配置
+	cm.config = newConfig
+	if cm.config.RegistryMap == nil {
+		cm.config.RegistryMap = make(map[string]string)
+	}
+
+	// 持久化到文件
+	if err := cm.saveToFile(); err != nil {
+		slog.Error("failed to save config file", "error", err)
+		return err
+	}
+
+	return nil
+}
+
+// LoadFromFile 从文件加载配置
+func (cm *ConfigManager) LoadFromFile() error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	data, err := os.ReadFile(cm.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 文件不存在不是错误
+		}
+		return err
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	if config.RegistryMap == nil {
+		config.RegistryMap = make(map[string]string)
+	}
+
+	cm.config = config
+	return nil
+}
+
+// saveToFile 保存配置到文件（原子写入）
+func (cm *ConfigManager) saveToFile() error {
+	data, err := json.MarshalIndent(cm.config, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// 原子写入：先写临时文件，再 rename
+	tmpFile := cm.filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFile, cm.filePath)
+}
+
+// AuthManager 认证管理器
+type AuthManager struct {
+	password string
+	tokens   map[string]time.Time // token -> expiry
+	mu       sync.RWMutex
+}
+
+// NewAuthManager 创建认证管理器
+func NewAuthManager(password string) *AuthManager {
+	return &AuthManager{
+		password: password,
+		tokens:   make(map[string]time.Time),
+	}
+}
+
+// Login 验证密码并生成 Token
+func (am *AuthManager) Login(password string) (string, error) {
+	if am.password == "" {
+		return "", fmt.Errorf("admin password not configured")
+	}
+
+	if password != am.password {
+		return "", fmt.Errorf("invalid password")
+	}
+
+	// 生成随机 token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", err
+	}
+	token := base64.StdEncoding.EncodeToString(tokenBytes)
+
+	// 存储 token，有效期 24 小时
+	am.mu.Lock()
+	defer am.mu.Unlock()
+	am.tokens[token] = time.Now().Add(24 * time.Hour)
+
+	// 清理过期 token
+	am.cleanExpiredTokens()
+
+	return token, nil
+}
+
+// ValidateToken 验证 Token 是否有效
+func (am *AuthManager) ValidateToken(authHeader string) bool {
+	if am.password == "" {
+		return false // 未设置密码，拒绝所有访问
+	}
+
+	// 解析 Authorization Header
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return false
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+
+	am.mu.RLock()
+	defer am.mu.RUnlock()
+
+	expiry, exists := am.tokens[token]
+	if !exists {
+		return false
+	}
+
+	// 检查是否过期
+	if time.Now().After(expiry) {
+		return false
+	}
+
+	return true
+}
+
+// cleanExpiredTokens 清理过期 token（需要在锁内调用）
+func (am *AuthManager) cleanExpiredTokens() {
+	now := time.Now()
+	for token, expiry := range am.tokens {
+		if now.After(expiry) {
+			delete(am.tokens, token)
+		}
+	}
+}
+
+// StatsCollector 统计收集器
+type StatsCollector struct {
+	totalRequests int64
+	cacheHits     int64
+	cacheMisses   int64
+}
+
+// NewStatsCollector 创建统计收集器
+func NewStatsCollector() *StatsCollector {
+	return &StatsCollector{}
+}
+
+// IncrementRequests 增加请求计数
+func (sc *StatsCollector) IncrementRequests() {
+	atomic.AddInt64(&sc.totalRequests, 1)
+}
+
+// IncrementCacheHits 增加缓存命中计数
+func (sc *StatsCollector) IncrementCacheHits() {
+	atomic.AddInt64(&sc.cacheHits, 1)
+}
+
+// IncrementCacheMisses 增加缓存未命中计数
+func (sc *StatsCollector) IncrementCacheMisses() {
+	atomic.AddInt64(&sc.cacheMisses, 1)
+}
+
+// GetStats 获取统计数据
+func (sc *StatsCollector) GetStats() map[string]int64 {
+	return map[string]int64{
+		"totalRequests": atomic.LoadInt64(&sc.totalRequests),
+		"cacheHits":     atomic.LoadInt64(&sc.cacheHits),
+		"cacheMisses":   atomic.LoadInt64(&sc.cacheMisses),
+	}
+}
+
 
 // urlCache 缓存解析后的 URL，避免重复解析
 var urlCache sync.Map // map[string]*url.URL
@@ -941,7 +1179,7 @@ func requestIDMiddleware() gin.HandlerFunc {
 }
 
 // accessLogMiddleware 访问日志中间件
-func accessLogMiddleware() gin.HandlerFunc {
+func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
@@ -949,6 +1187,17 @@ func accessLogMiddleware() gin.HandlerFunc {
 
 		// 处理请求
 		c.Next()
+
+		// 收集统计数据
+		if statsCollector != nil {
+			statsCollector.IncrementRequests()
+			cacheStatus := c.Writer.Header().Get("X-Cache")
+			if cacheStatus == "HIT" {
+				statsCollector.IncrementCacheHits()
+			} else if cacheStatus == "MISS" {
+				statsCollector.IncrementCacheMisses()
+			}
+		}
 
 		// 记录访问日志
 		latency := time.Since(start)
@@ -984,6 +1233,7 @@ func main() {
 	var registryMapSource string
 	var defaultRegistry string
 	var logLevelStr string
+	var configFile string
 
 	flag.StringVar(&listen, "listen", ":5000", "backend listen address")
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
@@ -993,6 +1243,7 @@ func main() {
 	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry to use when no domain suffix is configured or when accessing via IP address")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
+	flag.StringVar(&configFile, "config-file", "", "configuration file path (default: ./crproxy-config.json)")
 	flag.Parse()
 
 	// 初始化日志
@@ -1009,23 +1260,67 @@ func main() {
 		return
 	}
 
-	// 加载RegistryMap
-	var err error
-	RegistryMap, err = loadRegistryMap(registryMapSource)
-	if err != nil {
-		slog.Error("Failed to load registry map", "error", err)
+	// 初始化配置管理器
+	if configFile == "" {
+		configFile = "crproxy-config.json"
+	}
+	configManager := NewConfigManager(configFile)
+
+	// 尝试加载配置文件
+	if err := configManager.LoadFromFile(); err != nil {
+		slog.Error("failed to load config file", "error", err)
 		os.Exit(1)
 	}
 
-	if defaultRegistry != "" {
-		// 验证 default registry URL 格式
-		if _, err := url.Parse(defaultRegistry); err != nil {
-			slog.Error("invalid default-registry URL", "error", err)
+	// 使用命令行参数创建初始配置
+	initialConfig := Config{
+		RegistryMap:     make(map[string]string),
+		DefaultRegistry: defaultRegistry,
+		DomainSuffix:    DomainSuffix,
+		LogLevel:        logLevelStr,
+		CacheDir:        CacheDir,
+		Listen:          listen,
+	}
+
+	// 如果配置文件为空，使用命令行参数初始化
+	loadedConfig := configManager.GetConfig()
+	if len(loadedConfig.RegistryMap) == 0 {
+		// 加载RegistryMap
+		var err error
+		registryMap, err := loadRegistryMap(registryMapSource)
+		if err != nil {
+			slog.Error("Failed to load registry map", "error", err)
 			os.Exit(1)
 		}
-		RegistryMap["default"] = defaultRegistry
-		slog.Info("default-registry set", "registry", defaultRegistry)
+		initialConfig.RegistryMap = registryMap
+		configManager.UpdateConfig(initialConfig)
+	} else {
+		// 配置文件存在，使用配置文件的值，但命令行参数优先
+		if defaultRegistry != "" {
+			loadedConfig.DefaultRegistry = defaultRegistry
+		}
+		if DomainSuffix != "" {
+			loadedConfig.DomainSuffix = DomainSuffix
+		}
+		if logLevelStr != "info" {
+			loadedConfig.LogLevel = logLevelStr
+		}
+		if CacheDir != "" {
+			loadedConfig.CacheDir = CacheDir
+		}
+		if listen != ":5000" {
+			loadedConfig.Listen = listen
+		}
+		configManager.UpdateConfig(loadedConfig)
 	}
+
+	// 应用配置
+	config := configManager.GetConfig()
+	RegistryMap = config.RegistryMap
+	DomainSuffix = config.DomainSuffix
+	CacheDir = config.CacheDir
+	setLogLevel(config.LogLevel)
+
 	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
 
 	// 初始化缓存目录
@@ -1050,6 +1345,18 @@ func main() {
 		slog.Info("cache disabled")
 	}
 
+	// 初始化认证管理器
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	authManager := NewAuthManager(adminPassword)
+	if adminPassword == "" {
+		slog.Warn("ADMIN_PASSWORD not set, admin interface will be disabled")
+	} else {
+		slog.Info("admin interface enabled")
+	}
+
+	// 初始化统计收集器
+	statsCollector := NewStatsCollector()
+
 	if !Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -1057,8 +1364,9 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(requestIDMiddleware())
-	r.Use(accessLogMiddleware())
+	r.Use(accessLogMiddleware(statsCollector))
 
+	// 原有的 API 路由
 	r.Any("/v2/*path", forward)
 	r.Any("/token/*path", forward)
 
@@ -1069,6 +1377,234 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
+	})
+
+	// 管理界面 API
+	// 登录接口（无需认证）
+	r.POST("/admin/api/login", func(c *gin.Context) {
+		if authManager.password == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin interface is disabled. Set ADMIN_PASSWORD environment variable to enable."})
+			return
+		}
+
+		var req struct {
+			Password string `json:"password"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+			return
+		}
+
+		token, err := authManager.Login(req.Password)
+		if err != nil {
+			slog.Warn("login failed", "client_ip", c.ClientIP(), "error", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid password"})
+			return
+		}
+
+		slog.Info("login successful", "client_ip", c.ClientIP())
+		c.JSON(http.StatusOK, gin.H{"token": token})
+	})
+
+	// 认证中间件
+	authMiddlewareFunc := func(c *gin.Context) {
+		if authManager.password == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin interface is disabled"})
+			c.Abort()
+			return
+		}
+
+		authHeader := c.GetHeader("Authorization")
+		if !authManager.ValidateToken(authHeader) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+
+	// 管理 API 路由组（需要认证）
+	adminAPI := r.Group("/admin/api")
+	adminAPI.Use(authMiddlewareFunc)
+	{
+		// 获取配置
+		adminAPI.GET("/config", func(c *gin.Context) {
+			config := configManager.GetConfig()
+			c.JSON(http.StatusOK, config)
+		})
+
+		// 更新配置
+		adminAPI.PUT("/config", func(c *gin.Context) {
+			var newConfig Config
+			if err := c.BindJSON(&newConfig); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+				return
+			}
+
+			if err := configManager.UpdateConfig(newConfig); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			// 应用配置（实时生效）
+			RegistryMap = newConfig.RegistryMap
+			DomainSuffix = newConfig.DomainSuffix
+			setLogLevel(newConfig.LogLevel)
+
+			slog.Info("config updated", "client_ip", c.ClientIP())
+			c.JSON(http.StatusOK, gin.H{"message": "Configuration updated successfully"})
+		})
+
+		// 添加 registry 映射
+		adminAPI.POST("/registry", func(c *gin.Context) {
+			var req struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			}
+			if err := c.BindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
+				return
+			}
+
+			if req.Name == "" || req.URL == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Name and URL are required"})
+				return
+			}
+
+			// 验证 URL
+			if _, err := url.Parse(req.URL); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid URL"})
+				return
+			}
+
+			// 更新配置
+			config := configManager.GetConfig()
+			if config.RegistryMap == nil {
+				config.RegistryMap = make(map[string]string)
+			}
+			config.RegistryMap[req.Name] = req.URL
+
+			if err := configManager.UpdateConfig(config); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			// 应用配置
+			RegistryMap = config.RegistryMap
+
+			slog.Info("registry added", "name", req.Name, "url", req.URL)
+			c.JSON(http.StatusOK, gin.H{"message": "Registry added successfully"})
+		})
+
+		// 删除 registry 映射
+		adminAPI.DELETE("/registry/:name", func(c *gin.Context) {
+			name := c.Param("name")
+
+			if name == "default" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete default registry"})
+				return
+			}
+
+			config := configManager.GetConfig()
+			if _, exists := config.RegistryMap[name]; !exists {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Registry not found"})
+				return
+			}
+
+			delete(config.RegistryMap, name)
+			if err := configManager.UpdateConfig(config); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			// 应用配置
+			RegistryMap = config.RegistryMap
+
+			slog.Info("registry deleted", "name", name)
+			c.JSON(http.StatusOK, gin.H{"message": "Registry deleted successfully"})
+		})
+
+		// 获取统计
+		adminAPI.GET("/stats", func(c *gin.Context) {
+			stats := statsCollector.GetStats()
+			c.JSON(http.StatusOK, stats)
+		})
+
+		// 获取缓存统计
+		adminAPI.GET("/cache/stats", func(c *gin.Context) {
+			if CacheDir == "" {
+				c.JSON(http.StatusOK, gin.H{
+					"enabled": false,
+				})
+				return
+			}
+
+			var totalSize int64
+			var fileCount int
+			err := filepath.Walk(CacheDir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !info.IsDir() {
+					totalSize += info.Size()
+					fileCount++
+				}
+				return nil
+			})
+
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"enabled":   true,
+				"dir":       CacheDir,
+				"totalSize": totalSize,
+				"fileCount": fileCount,
+			})
+		})
+
+		// 清空缓存
+		adminAPI.POST("/cache/clear", func(c *gin.Context) {
+			if CacheDir == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Cache not enabled"})
+				return
+			}
+
+			files, err := os.ReadDir(CacheDir)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			var deleted int
+			var errors []string
+			for _, file := range files {
+				if file.Name() == ".lock" {
+					continue // 保留锁文件
+				}
+				if err := os.RemoveAll(filepath.Join(CacheDir, file.Name())); err != nil {
+					errors = append(errors, err.Error())
+				} else {
+					deleted++
+				}
+			}
+
+			slog.Info("cache cleared", "deleted_files", deleted, "errors", len(errors))
+			c.JSON(http.StatusOK, gin.H{
+				"deleted": deleted,
+				"errors":  errors,
+			})
+		})
+	}
+
+	// 管理界面前端页面
+	r.GET("/admin", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", adminHTML)
+	})
+	r.GET("/admin/", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", adminHTML)
 	})
 
 	slog.Info("crproxy listening", "address", listen)
