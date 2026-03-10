@@ -1231,6 +1231,20 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		// 处理请求
 		c.Next()
 
+		// 排除不需要统计和记录日志的路径
+		excludePaths := []string{"/healthz", "/admin"}
+		shouldSkip := false
+		for _, excludePath := range excludePaths {
+			if path == excludePath || strings.HasPrefix(path, excludePath+"/") {
+				shouldSkip = true
+				break
+			}
+		}
+
+		if shouldSkip {
+			return
+		}
+
 		// 收集统计数据
 		if statsCollector != nil {
 			statsCollector.IncrementRequests()
@@ -1252,20 +1266,17 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 			cacheStatus = "BYPASS"
 		}
 
-		// 只记录重要的请求（排除 healthz 等）
-		if path != "/healthz" {
-			slog.Info("request",
-				"request_id", requestID,
-				"method", c.Request.Method,
-				"path", path,
-				"query", query,
-				"status", status,
-				"latency_ms", latency.Milliseconds(),
-				"size", size,
-				"client_ip", c.ClientIP(),
-				"cache", cacheStatus,
-			)
-		}
+		slog.Info("request",
+			"request_id", requestID,
+			"method", c.Request.Method,
+			"path", path,
+			"query", query,
+			"status", status,
+			"latency_ms", latency.Milliseconds(),
+			"size", size,
+			"client_ip", c.ClientIP(),
+			"cache", cacheStatus,
+		)
 	}
 }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>crproxy 管理界面</title>
+    <title>crproxy 管理控制台</title>
     <style>
         * {
             margin: 0;
@@ -11,294 +11,418 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --danger: #ef4444;
+            --danger-dark: #dc2626;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-            background: #f5f5f5;
-            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--gray-800);
             line-height: 1.6;
         }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        /* 登录页面 */
         .login-container {
-            max-width: 400px;
+            max-width: 420px;
             margin: 100px auto;
             background: white;
             padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
         }
 
-        .login-container h1 {
+        .login-header {
             text-align: center;
             margin-bottom: 30px;
-            color: #2c3e50;
+        }
+
+        .login-header .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .login-header h1 {
+            color: var(--gray-900);
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .login-header p {
+            color: var(--gray-600);
+            margin-top: 8px;
         }
 
         .login-form input {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .login-form button {
             width: 100%;
-            padding: 12px;
-            background: #3498db;
+            padding: 14px;
+            background: var(--primary);
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s;
         }
 
         .login-form button:hover {
-            background: #2980b9;
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
 
         .error-message {
-            color: #e74c3c;
+            color: var(--danger);
             text-align: center;
-            margin-top: 15px;
+            margin-top: 16px;
             font-size: 14px;
+            padding: 12px;
+            background: #fef2f2;
+            border-radius: 6px;
         }
 
-        /* 主应用 */
         #app {
             display: none;
+            background: var(--gray-50);
+            min-height: 100vh;
         }
 
-        .header {
-            background: white;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .header h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .header .logout-btn {
-            float: right;
-            padding: 8px 16px;
-            background: #e74c3c;
+        .app-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
             color: white;
-            border: none;
-            border-radius: 4px;
+            padding: 24px 0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
+        .app-header .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .app-header .subtitle {
+            opacity: 0.9;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .logout-btn {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
         }
 
         .tabs {
             background: white;
-            margin-bottom: 20px;
-            border-radius: 8px;
+            margin-bottom: 24px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
         }
 
         .tab-btn {
-            padding: 15px 30px;
+            flex: 1;
+            padding: 16px 32px;
             background: white;
             border: none;
-            font-size: 16px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: all 0.3s;
             border-bottom: 3px solid transparent;
+            color: var(--gray-600);
         }
 
         .tab-btn:hover {
-            background: #f8f9fa;
+            background: var(--gray-50);
+            color: var(--gray-800);
         }
 
         .tab-btn.active {
-            border-bottom-color: #3498db;
-            color: #3498db;
-            font-weight: 600;
+            border-bottom-color: var(--primary);
+            color: var(--primary);
+            background: white;
         }
 
         .tab-content {
             display: none;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .tab-content.active {
             display: block;
         }
 
-        h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #ecf0f1;
-            padding-bottom: 10px;
+        .card {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
         }
 
-        h3 {
-            color: #34495e;
-            margin: 20px 0 15px 0;
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items:: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--gray-100);
         }
 
-        /* 表格 */
+        .card-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         th, td {
-            padding: 12px;
+            padding: 14px 16px;
             text-align: left;
-            border-bottom: 1px solid #ecf0f1;
+            border-bottom: 1px solid var(--gray-200);
         }
 
         th {
-            background: #f8f9fa;
+            background: var(--gray-50);
             font-weight: 600;
-            color: #2c3e50;
+            color: var(--gray-700);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         tr:hover {
-            background: #f8f9fa;
+            background: var(--gray-50);
         }
 
         .btn {
-            padding: 6px 12px;
+            padding: 8px 16px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 600;
             transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .btn-primary {
-            background: #3498db;
+            background: var(--primary);
             color: white;
         }
 
         .btn-primary:hover {
-            background: #2980b9;
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
         .btn-danger {
-            background: #e74c3c;
+            background: var(--danger);
             color: white;
         }
 
         .btn-danger:hover {
-            background: #c0392b;
+            background: var(--danger-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
 
         .btn-success {
-            background: #27ae60;
+            background: var(--success);
             color: white;
         }
 
         .btn-success:hover {
-            background: #229954;
+            background: #059669;
+            transform: translateY(-1px);
         }
 
-        /* 表单 */
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             font-weight: 600;
-            color: #34495e;
+            color: var(--gray-700);
+            font-size: 14px;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 12px 14px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
             font-size: 14px;
+            transition: all 0.3s;
         }
 
-        .form-row {
-            display: flex;
-            gap: 20px;
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        .form-row .form-group {
-            flex: 1;
+        .form-group input[readonly] {
+            background: var(--gray-100);
+            cursor: not-allowed;
         }
 
-        /* 统计卡片 */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
         }
 
         .stat-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 25px;
-            border-radius: 8px;
-            text-align: center;
+            padding: 28px;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
         }
 
         .stat-card.green {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
         }
 
         .stat-card.orange {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
         }
 
         .stat-card.blue {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
         }
 
-        .stat-card .stat-value {
-            font-size: 32px;
-            font-weight: bold;
-            margin-bottom: 5px;
+        .stat-card.red {
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
         }
 
-        .stat-card .stat-label {
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+        }
+
+        .stat-label {
             font-size: 14px;
-            opacity: 0.9;
+            opacity: 0.95;
+            position: relative;
         }
 
-        /* Toast 通知 */
         .toast {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 4px;
+            top: 24px;
+            right: 24px;
+            padding: 16px 20px;
+            border-radius: 8px;
             color: white;
             font-weight: 500;
             z-index: 1000;
             animation: slideIn 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
 
         .toast.success {
-            background: #27ae60;
+            background: var(--success);
         }
 
         .toast.error {
-            background: #e74c3c;
+            background: var(--danger);
         }
 
         @keyframes slideIn {
@@ -312,7 +436,6 @@
             }
         }
 
-        /* 确认对话框 */
         .modal {
             display: none;
             position: fixed;
@@ -322,6 +445,7 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
         }
 
         .modal.show {
@@ -332,131 +456,235 @@
 
         .modal-content {
             background: white;
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 400px;
+            padding: 32px;
+            border-radius: 12px;
+            max-width: 420px;
             text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
         }
 
         .modal-content h3 {
-            color: #e74c3c;
+            color: var(--gray-900);
+            font-size: 20px;
+            margin-bottom: 12px;
         }
 
         .modal-content p {
-            margin: 20px 0;
-            color: #7f8c8d;
+            margin: 16px 0 24px 0;
+            color: var(--gray-600);
         }
 
         .modal-buttons {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             justify-content: center;
+        }
+
+        .modal-buttons .btn {
+            min-width: 100px;
+            padding: 12px 24px;
+        }
+
+        .warning-box {
+            margin-top: 32px;
+            padding: 20px;
+            background: #fffbeb;
+            border-radius: 8px;
+            border-left: 4px solid var(--warning);
+        }
+
+        .warning-box h3 {
+            color: #92400e;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+
+        .warning-box p {
+            color: #78350f;
+            margin: 0 0 16px 0;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--gray-600);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
         }
 
         .loading {
             text-align: center;
-            padding: 20px;
-            color: #95a5a6;
+            padding: 24px;
+            color: var(--gray-600);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-primary {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab-btn {
+                border-bottom: none;
+                border-left: 3px solid transparent;
+            }
+
+            .tab-btn.active {
+                border-left-color: var(--primary);
+            }
         }
     </style>
 </head>
 <body>
     <!-- 登录页面 -->
     <div id="login-page" class="login-container">
-        <h1>🔐 crproxy 管理</h1>
+        <div class="login-header">
+            <div class="icon">🔐</div>
+            <h1>crproxy</h1>
+            <p>容器镜像代理管理控制台</p>
+        </div>
         <form class="login-form" onsubmit="handleLogin(event)">
             <input type="password" id="password" placeholder="输入管理密码" required>
             <button type="submit">登录</button>
         </form>
-        <div id="login-error" class="error-message"></div>
+        <div id="login-error" class="error-message" style="display: none;"></div>
     </div>
 
     <!-- 主应用 -->
-    <div id="app" class="container">
-        <div class="header">
-            <button class="logout-btn" onclick="logout()">退出登录</button>
-            <h1>🚀 crproxy 管理界面</h1>
-            <p>容器镜像代理配置管理系统</p>
+    <div id="app">
+        <div class="app-header">
+            <div class="container">
+                <div>
+                    <h1>🚀 crproxy 管理控制台</h1>
+                    <div class="subtitle">容器镜像代理配置管理系统</div>
+                </div>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
         </div>
 
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('config')">配置管理</button>
-            <button class="tab-btn" onclick="switchTab('stats')">运行统计</button>
-        </div>
+        <div class="container">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('config')">⚙️ 配置管理</button>
+                <button class="tab-btn" onclick="switchTab('stats')">📊 运行统计</button>
+            </div>
 
-        <!-- 配置管理 -->
-        <div id="config-tab" class="tab-content active">
-            <h2>📦 Registry 映射配置</h2>
-            <table id="registry-table">
-                <thead>
-                    <tr>
-                        <th>名称</th>
-                        <th>URL</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="registry-tbody"></tbody>
-            </table>
+            <!-- 配置管理 -->
+            <div id="config-tab" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📦 Registry 映射配置</h2>
+                    </div>
+                    <table id="registry-table">
+                        <thead>
+                            <tr>
+                                <th>名称</th>
+                                <th>URL</th>
+                                <th style="width: 120px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="registry-tbody"></tbody>
+                    </table>
 
-            <h3>添加新映射</h3>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>名称</label>
-                    <input type="text" id="new-registry-name" placeholder="例如: gcr">
+                    <h3 style="margin: 24px 0 16px 0; color: var(--gray-800);">添加新映射</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>名称</label>
+                            <input type="text" id="new-registry-name" placeholder="例如: gcr">
+                        </div>
+                        <div class="form-group">
+                            <label>URL</label>
+                            <input type="text" id="new-registry-url" placeholder="例如: https://gcr.io">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button class="btn btn-primary" onclick="addRegistry()">➕ 添加</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>URL</label>
-                    <input type="text" id="new-registry-url" placeholder="例如: https://gcr.io">
-                </div>
-                <div class="form-group" style="flex: 0;">
-                    <label>&nbsp;</label>
-                    <button class="btn btn-primary" onclick="addRegistry()">添加</button>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">⚙️ 服务参数配置</h2>
+                    </div>
+                    <form id="service-config-form">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>默认 Registry</label>
+                                <input type="text" id="default-registry" placeholder="https://registry-1.docker.io">
+                            </div>
+                            <div class="form-group">
+                                <label>域名后缀</label>
+                                <input type="text" id="domain-suffix" placeholder="例如: mydomain.com">
+                            </div>
+                            <div class="form-group">
+                                <label>日志级别</label>
+                                <select id="log-level">
+                                    <option value="debug">Debug</option>
+                                    <option value="info">Info</option>
+                                    <option value="warn">Warn</option>
+                                    <option value="error">Error</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>缓存目录 <span class="badge badge-primary">只读</span></label>
+                                <input type="text" id="cache-dir" readonly>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
+                    </form>
                 </div>
             </div>
 
-            <h2>⚙️ 服务参数配置</h2>
-            <form id="service-config-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>默认 Registry</label>
-                        <input type="text" id="default-registry" placeholder="https://registry-1.docker.io">
+            <!-- 运行统计 -->
+            <div id="stats-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">📊 请求统计</h2>
                     </div>
-                    <div class="form-group">
-                        <label>域名后缀</label>
-                        <input type="text" id="domain-suffix" placeholder="例如: mydomain.com">
+                    <div class="stats-grid" id="request-stats"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">💾 缓存统计</h2>
+                    </div>
+                    <div class="stats-grid" id="cache-stats"></div>
+
+                    <div class="warning-box">
+                        <h3>⚠️ 危险操作</h3>
+                        <p>清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。</p>
+                        <button class="btn btn-danger" onclick="confirmClearCache()">🗑️ 清空缓存</button>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>日志级别</label>
-                        <select id="log-level">
-                            <option value="debug">Debug</option>
-                            <option value="info">Info</option>
-                            <option value="warn">Warn</option>
-                            <option value="error">Error</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>缓存目录（只读，需重启生效）</label>
-                        <input type="text" id="cache-dir" readonly>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-success" onclick="saveConfig()">保存配置</button>
-            </form>
-        </div>
-
-        <!-- 运行统计 -->
-        <div id="stats-tab" class="tab-content">
-            <h2>📊 请求统计</h2>
-            <div class="stats-grid" id="request-stats"></div>
-
-            <h2>💾 缓存统计</h2>
-            <div class="stats-grid" id="cache-stats"></div>
-
-            <div style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 4px; border-left: 4px solid #ffc107;">
-                <h3 style="margin: 0 0 10px 0; color: #856404;">⚠️ 危险操作</h3>
-                <p style="margin: 0 0 15px 0; color: #856404;">清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。</p>
-                <button class="btn btn-danger" onclick="confirmClearCache()">🗑️ 清空缓存</button>
             </div>
         </div>
     </div>
@@ -464,10 +692,11 @@
     <!-- 确认对话框 -->
     <div id="confirm-modal" class="modal">
         <div class="modal-content">
-            <h3>⚠️ 确认清空缓存？</h3>
+            <div class="modal-icon">⚠️</div>
+            <h3>确认清空缓存？</h3>
             <p>此操作将删除所有缓存文件，无法恢复。</p>
             <div class="modal-buttons">
-                <button class="btn" onclick="closeModal()">取消</button>
+                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
                 <button class="btn btn-danger" onclick="clearCache()">确认清空</button>
             </div>
         </div>
@@ -502,10 +731,14 @@
                     localStorage.setItem('admin_token', token);
                     showApp();
                 } else {
-                    document.getElementById('login-error').textContent = data.error || '登录失败';
+                    const errorDiv = document.getElementById('login-error');
+                    errorDiv.textContent = data.error || '登录失败';
+                    errorDiv.style.display = 'block';
                 }
             } catch (error) {
-                document.getElementById('login-error').textContent = '网络错误，请重试';
+                const errorDiv = document.getElementById('login-error');
+                errorDiv.textContent = '网络错误，请重试';
+                errorDiv.style.display = 'block';
             }
         }
 
@@ -599,7 +832,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('配置已保存并实时生效', 'success');
+                    showToast('✅ 配置已保存并实时生效', 'success');
                     loadConfig();
                 } else {
                     showToast(data.error || '保存失败', 'error');
@@ -632,7 +865,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('添加成功', 'success');
+                    showToast('✅ 添加成功', 'success');
                     document.getElementById('new-registry-name').value = '';
                     document.getElementById('new-registry-url').value = '';
                     loadConfig();
@@ -659,7 +892,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('删除成功', 'success');
+                    showToast('✅ 删除成功', 'success');
                     loadConfig();
                 } else {
                     showToast(data.error || '删除失败', 'error');
@@ -760,7 +993,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast(`缓存已清空，删除了 ${data.deleted} 个文件`, 'success');
+                    showToast(`✅ 缓存已清空，删除了 ${data.deleted} 个文件`, 'success');
                     loadStats();
                 } else {
                     showToast(data.error || '清空失败', 'error');
