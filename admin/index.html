@@ -827,23 +827,36 @@
 
         // 保存配置
         async function saveConfig() {
-            const cacheDir = document.getElementById('cache-dir').value;
-
-            const config = {
-                defaultRegistry: document.getElementById('default-registry').value,
-                domainSuffix: document.getElementById('domain-suffix').value,
-                logLevel: document.getElementById('log-level').value,
-                cacheDir: cacheDir,
-            };
-
             try {
+                // 先获取当前完整配置
+                const currentResponse = await fetch('/admin/api/config', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+
+                if (!currentResponse.ok) {
+                    showToast('获取当前配置失败', 'error');
+                    return;
+                }
+
+                const currentConfig = await currentResponse.json();
+
+                // 只更新修改的字段
+                const cacheDir = document.getElementById('cache-dir').value;
+                currentConfig.defaultRegistry = document.getElementById('default-registry').value;
+                currentConfig.domainSuffix = document.getElementById('domain-suffix').value;
+                currentConfig.logLevel = document.getElementById('log-level').value;
+                if (cacheDir && cacheDir !== '(未启用)') {
+                    currentConfig.cacheDir = cacheDir;
+                }
+
+                // 发送完整配置
                 const response = await fetch('/admin/api/config', {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(config)
+                    body: JSON.stringify(currentConfig)
                 });
 
                 const data = await response.json();
