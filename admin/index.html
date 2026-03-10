@@ -682,6 +682,16 @@
             <div id="stats-tab" class="tab-content">
                 <div class="card">
                     <div class="card-header">
+                        <h2 class="card-title">🔄 系统更新</h2>
+                    </div>
+                    <div id="update-info" class="loading">正在检查更新...</div>
+                    <div id="update-actions" style="display: none; margin-top: 16px;">
+                        <button id="update-btn" class="btn btn-primary" onclick="doUpdate()">⬆️ 更新到最新版本</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
                         <h2 class="card-title">📊 请求统计</h2>
                     </div>
                     <div class="stats-grid" id="request-stats"></div>
@@ -718,6 +728,7 @@
 
     <script>
         let token = localStorage.getItem('admin_token');
+        let updateChecked = false;
 
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
@@ -938,6 +949,12 @@
 
         // 加载统计
         async function loadStats() {
+            // 只在首次加载时检查更新
+            if (!updateChecked) {
+                checkUpdate();
+                updateChecked = true;
+            }
+
             try {
                 // 请求统计
                 const reqResponse = await fetch('/admin/api/stats', {
@@ -1047,6 +1064,84 @@
             setTimeout(() => {
                 toast.remove();
             }, 3000);
+        }
+
+        // 检查更新
+        async function checkUpdate() {
+            try {
+                const response = await fetch('/admin/api/update/check', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+
+                const info = await response.json();
+                const updateInfoDiv = document.getElementById('update-info');
+                const updateActionsDiv = document.getElementById('update-actions');
+
+                if (info.hasUpdate) {
+                    updateInfoDiv.innerHTML = `
+                        <div class="stats-grid" style="margin-bottom: 0;">
+                            <div class="stat-card">
+                                <div class="stat-value">${info.currentVersion}</div>
+                                <div class="stat-label">当前版本</div>
+                            </div>
+                            <div class="stat-card green">
+                                <div class="stat-value">${info.latestVersion}</div>
+                                <div class="stat-label">最新版本</div>
+                            </div>
+                        </div>
+                    `;
+                    updateActionsDiv.style.display = 'block';
+                } else {
+                    updateInfoDiv.innerHTML = `
+                        <div class="stats-grid" style="margin-bottom: 0;">
+                            <div class="stat-card green">
+                                <div class="stat-value">${info.currentVersion}</div>
+                                <div class="stat-label">当前版本 (已是最新)</div>
+                            </div>
+                        </div>
+                    `;
+                    updateActionsDiv.style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('update-info').innerHTML = `
+                    <div style="color: var(--danger);">检查更新失败: ${error.message}</div>
+                `;
+            }
+        }
+
+        // 执行更新
+        async function doUpdate() {
+            const btn = document.getElementById('update-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 更新中...';
+
+            try {
+                const response = await fetch('/admin/api/update', {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast(`✅ ${data.message}\n新版本: ${data.newVersion}`, 'success');
+                    // 重新检查更新状态
+                    setTimeout(checkUpdate, 1000);
+                } else {
+                    showToast(data.error || '更新失败', 'error');
+                    btn.disabled = false;
+                    btn.textContent = '⬆️ 更新到最新版本';
+                }
+            } catch (error) {
+                showToast('更新失败: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = '⬆️ 更新到最新版本';
+            }
         }
     </script>
 </body>

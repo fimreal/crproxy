@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -9,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"hash"
@@ -186,6 +188,7 @@ type Config struct {
 	LogLevel        string            `json:"logLevel"`
 	CacheDir        string            `json:"cacheDir"`
 	Listen          string            `json:"listen"`
+	AdminPassword   string            `json:"adminPassword"`
 }
 
 // ConfigManager 配置管理器（线程安全）
@@ -701,39 +704,6 @@ func tryRemoveFile(name string) error {
 	return nil
 }
 
-// acquireCacheLock 尝试获取缓存目录的锁，防止多实例共享
-// 返回释放锁的函数
-func acquireCacheLock() (func(), error) {
-	if CacheDir == "" {
-		return func() {}, nil
-	}
-
-	lockFile := filepath.Join(CacheDir, ".lock")
-
-	// 尝试创建锁文件（排他创建）
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-	if err != nil {
-		if os.IsExist(err) {
-			// 锁文件已存在，读取其中的 PID
-			data, readErr := os.ReadFile(lockFile)
-			if readErr == nil {
-				return nil, fmt.Errorf("cache directory is already in use by process %s (PID: %s). Each instance must use a separate cache directory", strings.TrimSpace(string(data)), strings.TrimSpace(string(data)))
-			}
-			return nil, fmt.Errorf("cache directory is already in use by another instance. Each instance must use a separate cache directory")
-		}
-		return nil, fmt.Errorf("failed to create lock file: %v", err)
-	}
-
-	// 写入当前进程 PID
-	fmt.Fprintf(f, "%d\n", os.Getpid())
-	f.Close()
-
-	// 返回释放函数
-	return func() {
-		tryRemoveFile(lockFile)
-	}, nil
-}
-
 // cleanStaleTempFiles 清理过期的临时缓存文件
 func cleanStaleTempFiles() {
 	if CacheDir == "" {
@@ -1049,6 +1019,11 @@ func forward(c *gin.Context) {
 	// handle proxy request
 	proxy := httputil.ReverseProxy{
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
+			// 区分客户端断开和真正的代理错误
+			if errors.Is(err, context.Canceled) {
+				slog.Debug("client disconnected", "path", req.URL.Path)
+				return
+			}
 			slog.Error("proxy error", "error", err)
 			rw.WriteHeader(http.StatusBadGateway)
 			fmt.Fprintf(rw, "Bad Gateway: %v", err)
@@ -1290,14 +1265,56 @@ type GitHubRelease struct {
 	} `json:"assets"`
 }
 
-// updateSelf 自升级到最新版本
-func updateSelf() error {
+// UpdateInfo 更新信息
+type UpdateInfo struct {
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	HasUpdate      bool   `json:"hasUpdate"`
+}
+
+// checkForUpdate 检查是否有更新
+func checkForUpdate() (*UpdateInfo, error) {
+	const repo = "fimreal/crproxy"
+
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release GitHubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("failed to parse release info: %w", err)
+	}
+
+	info := &UpdateInfo{
+		CurrentVersion: version,
+		LatestVersion:  release.TagName,
+		HasUpdate:      release.TagName != version,
+	}
+	return info, nil
+}
+
+// performUpdate 执行更新
+func performUpdate() (string, error) {
 	const repo = "fimreal/crproxy"
 
 	// 获取当前可执行文件路径
 	execPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+		return "", fmt.Errorf("failed to get executable path: %w", err)
 	}
 
 	slog.Info("checking for updates", "current_version", version, "executable", execPath)
@@ -1306,24 +1323,24 @@ func updateSelf() error {
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to fetch releases: %w", err)
+		return "", fmt.Errorf("failed to fetch releases: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
 	var release GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return fmt.Errorf("failed to parse release info: %w", err)
+		return "", fmt.Errorf("failed to parse release info: %w", err)
 	}
 
 	latestVersion := release.TagName
@@ -1331,8 +1348,7 @@ func updateSelf() error {
 
 	// 检查是否需要更新
 	if latestVersion == version {
-		fmt.Printf("✅ Already at the latest version: %s\n", version)
-		return nil
+		return "", nil // 已是最新版本
 	}
 
 	// 确定平台和架构
@@ -1355,7 +1371,7 @@ func updateSelf() error {
 	}
 
 	if downloadURL == "" {
-		return fmt.Errorf("no binary found for %s/%s (looking for %s)", goos, goarch, assetName)
+		return "", fmt.Errorf("no binary found for %s/%s (looking for %s)", goos, goarch, assetName)
 	}
 
 	slog.Info("downloading new version", "url", downloadURL, "asset", assetName)
@@ -1363,26 +1379,26 @@ func updateSelf() error {
 	// 下载新版本
 	downloadResp, err := http.Get(downloadURL)
 	if err != nil {
-		return fmt.Errorf("failed to download binary: %w", err)
+		return "", fmt.Errorf("failed to download binary: %w", err)
 	}
 	defer downloadResp.Body.Close()
 
 	if downloadResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed with status %d", downloadResp.StatusCode)
+		return "", fmt.Errorf("download failed with status %d", downloadResp.StatusCode)
 	}
 
 	// 创建临时文件
 	tmpFile := execPath + ".new"
 	out, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
 
 	// 复制文件内容
 	if _, err := io.Copy(out, downloadResp.Body); err != nil {
 		out.Close()
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to write binary: %w", err)
+		return "", fmt.Errorf("failed to write binary: %w", err)
 	}
 	out.Close()
 
@@ -1391,7 +1407,7 @@ func updateSelf() error {
 	if _, err := os.Stat(execPath); err == nil {
 		if err := os.Rename(execPath, backupPath); err != nil {
 			os.Remove(tmpFile)
-			return fmt.Errorf("failed to backup old binary: %w", err)
+			return "", fmt.Errorf("failed to backup old binary: %w", err)
 		}
 		slog.Info("backup created", "path", backupPath)
 	}
@@ -1403,13 +1419,24 @@ func updateSelf() error {
 			os.Rename(backupPath, execPath)
 		}
 		os.Remove(tmpFile)
-		return fmt.Errorf("failed to replace binary: %w", err)
+		return "", fmt.Errorf("failed to replace binary: %w", err)
 	}
 
-	fmt.Printf("✅ Successfully updated to version %s\n", latestVersion)
-	fmt.Printf("📁 Backup saved to: %s\n", backupPath)
-	fmt.Println("⚠️  Please restart the service to use the new version")
+	return latestVersion, nil
+}
 
+// updateSelf 自升级到最新版本（命令行使用）
+func updateSelf() error {
+	latestVersion, err := performUpdate()
+	if err != nil {
+		return err
+	}
+	if latestVersion == "" {
+		fmt.Printf("✅ Already at the latest version: %s\n", version)
+		return nil
+	}
+	fmt.Printf("✅ Successfully updated to version %s\n", latestVersion)
+	fmt.Println("⚠️  Please restart the service to use the new version")
 	return nil
 }
 
@@ -1528,14 +1555,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// 获取缓存目录锁，防止多实例共享
-		releaseLock, err := acquireCacheLock()
-		if err != nil {
-			slog.Error("cache lock failed", "error", err)
-			os.Exit(1)
-		}
-		defer releaseLock()
-
 		slog.Info("cache enabled", "cache_dir", CacheDir)
 		// 启动缓存清理器（清理崩溃遗留的临时文件）
 		startCacheCleaner()
@@ -1543,11 +1562,14 @@ func main() {
 		slog.Info("cache disabled")
 	}
 
-	// 初始化认证管理器
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	// 初始化认证管理器（优先使用配置文件中的密码，环境变量作为备选）
+	adminPassword := configManager.GetConfig().AdminPassword
+	if adminPassword == "" {
+		adminPassword = os.Getenv("ADMIN_PASSWORD")
+	}
 	authManager := NewAuthManager(adminPassword)
 	if adminPassword == "" {
-		slog.Warn("ADMIN_PASSWORD not set, admin interface will be disabled")
+		slog.Warn("adminPassword not set in config or ADMIN_PASSWORD env, admin interface will be disabled")
 	} else {
 		slog.Info("admin interface enabled")
 	}
@@ -1792,9 +1814,6 @@ func main() {
 			var deleted int
 			var errors []string
 			for _, file := range files {
-				if file.Name() == ".lock" {
-					continue // 保留锁文件
-				}
 				if err := os.RemoveAll(filepath.Join(CacheDir, file.Name())); err != nil {
 					errors = append(errors, err.Error())
 				} else {
@@ -1806,6 +1825,38 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{
 				"deleted": deleted,
 				"errors":  errors,
+			})
+		})
+
+		// 检查更新
+		adminAPI.GET("/update/check", func(c *gin.Context) {
+			info, err := checkForUpdate()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, info)
+		})
+
+		// 执行更新
+		adminAPI.POST("/update", func(c *gin.Context) {
+			latestVersion, err := performUpdate()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if latestVersion == "" {
+				c.JSON(http.StatusOK, gin.H{
+					"message":        "Already at the latest version",
+					"currentVersion": version,
+				})
+				return
+			}
+			slog.Info("binary updated", "new_version", latestVersion, "client_ip", c.ClientIP())
+			c.JSON(http.StatusOK, gin.H{
+				"message":        "Update successful. Please restart the service.",
+				"currentVersion": version,
+				"newVersion":     latestVersion,
 			})
 		})
 	}

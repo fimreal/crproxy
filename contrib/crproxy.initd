@@ -22,6 +22,10 @@ pidfile="/run/${RC_SVCNAME}.pid"
 # User and group
 command_user="crproxy:crproxy"
 
+# Logs
+output_log="/var/log/crproxy/stdout.log"
+error_log="/var/log/crproxy/stderr.log"
+
 # Working directory
 directory="/var/lib/crproxy"
 
@@ -46,15 +50,16 @@ start_pre() {
         return 1
     fi
 
-    # Check if ADMIN_PASSWORD is set
+    # Check if ADMIN_PASSWORD is set (can also be set in config file)
     if [ -z "$ADMIN_PASSWORD" ]; then
-        ewarn "ADMIN_PASSWORD not set - admin interface will be disabled"
+        ewarn "ADMIN_PASSWORD not set - set it in config file or env to enable admin interface"
     fi
 
     # Create directories if they don't exist
     checkpath --directory --owner "$command_user" --mode 0755 /var/lib/crproxy
     checkpath --directory --owner "$command_user" --mode 0755 "${CACHE_DIR:-/var/lib/crproxy/cache}"
-    checkpath --directory --owner "$command_user" --mode 0755 /etc/crproxy
+    checkpath --file --owner "$command_user" --mode 0644 "${CONFIG_FILE:-/etc/crproxy/crproxy-config.json}"
+    checkpath --directory --owner "$command_user" --mode 0755 /var/log/crproxy
 
     # Verify cache directory is writable
     local cache_dir="${CACHE_DIR:-/var/lib/crproxy/cache}"

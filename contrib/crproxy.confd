@@ -1,9 +1,9 @@
 # crproxy configuration for OpenRC
 # Copy this file to /etc/conf.d/crproxy
 
-# Admin interface password (REQUIRED for admin interface)
+# Admin interface password (can also be set in crproxy-config.json)
 # Generate a strong password: openssl rand -base64 32
-ADMIN_PASSWORD="your_secure_password_here"
+# ADMIN_PASSWORD="your_secure_password_here"
 
 # Listen address (default: :5000)
 LISTEN=":5000"
