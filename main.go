@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 )
 
 var version, buildTime string
@@ -83,8 +84,24 @@ var embedRegistryMap []byte
 //go:embed admin/index.html
 var adminHTML []byte
 
-// RegistryMap 镜像仓库地址
-var RegistryMap map[string]string
+// RegistryMap 镜像仓库地址（使用 atomic.Value 实现线程安全的原子替换）
+var registryMap atomic.Value
+
+// GetRegistryMap 获取当前的 RegistryMap
+func GetRegistryMap() map[string]string {
+	if m, ok := registryMap.Load().(map[string]string); ok {
+		return m
+	}
+	return make(map[string]string)
+}
+
+// SetRegistryMap 原子替换 RegistryMap
+func SetRegistryMap(m map[string]string) {
+	registryMap.Store(m)
+}
+
+// cacheMutex 缓存操作互斥锁（保护缓存清理和写入）
+var cacheMutex sync.RWMutex
 
 // CacheMeta 缓存元数据
 type CacheMeta struct {
@@ -267,8 +284,9 @@ func (cm *ConfigManager) saveToFile() error {
 	}
 
 	// 原子写入：先写临时文件，再 rename
+	// 配置文件可能包含敏感信息，设置权限为 0600（仅所有者可读写）
 	tmpFile := cm.filePath + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+	if err := os.WriteFile(tmpFile, data, 0600); err != nil {
 		return err
 	}
 
@@ -284,9 +302,29 @@ type AuthManager struct {
 
 // NewAuthManager 创建认证管理器
 func NewAuthManager(password string) *AuthManager {
-	return &AuthManager{
+	am := &AuthManager{
 		password: password,
 		tokens:   make(map[string]time.Time),
+	}
+
+	// 启动定期清理过期 token 的任务
+	if password != "" {
+		go am.startCleanupTask()
+	}
+
+	return am
+}
+
+// startCleanupTask 定期清理过期 token（每小时清理一次）
+func (am *AuthManager) startCleanupTask() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		am.mu.Lock()
+		am.cleanExpiredTokens()
+		am.mu.Unlock()
+		slog.Debug("expired tokens cleaned")
 	}
 }
 
@@ -330,16 +368,17 @@ func (am *AuthManager) ValidateToken(authHeader string) bool {
 	}
 	token := strings.TrimPrefix(authHeader, "Bearer ")
 
-	am.mu.RLock()
-	defer am.mu.RUnlock()
+	am.mu.Lock()
+	defer am.mu.Unlock()
 
 	expiry, exists := am.tokens[token]
 	if !exists {
 		return false
 	}
 
-	// 检查是否过期
+	// 检查是否过期，如果过期则删除
 	if time.Now().After(expiry) {
+		delete(am.tokens, token)
 		return false
 	}
 
@@ -413,15 +452,17 @@ func getURLCached(urlStr string) (*url.URL, error) {
 }
 
 func findRegistryURL(host string) (*url.URL, error) {
+	registryMap := GetRegistryMap()
+
 	if DomainSuffix != "" {
 		// 当请求域名等于 DomainSuffix 时，使用默认 registry
 		if DomainSuffix == host {
-			if defaultRegistry := RegistryMap["default"]; defaultRegistry != "" {
+			if defaultRegistry := registryMap["default"]; defaultRegistry != "" {
 				return getURLCached(defaultRegistry)
 			}
 		} else if suffix, found := strings.CutSuffix(host, "."+DomainSuffix); found {
 			// 处理带前缀的镜像仓库域名
-			registryURL := RegistryMap[suffix]
+			registryURL := registryMap[suffix]
 			if registryURL != "" {
 				return getURLCached(registryURL)
 			}
@@ -1012,8 +1053,10 @@ func forward(c *gin.Context) {
 			fmt.Fprintf(rw, "Bad Gateway: %v", err)
 		},
 		Director: func(req *http.Request) {
+			registryMap := GetRegistryMap()
+
 			// 初始化请求的基本信息, 默认使用默认registry
-			defaultURL, err := getURLCached(RegistryMap["default"])
+			defaultURL, err := getURLCached(registryMap["default"])
 			if err != nil {
 				slog.Error("failed to parse default registry URL", "error", err)
 				// 设置一个无效的 URL，让代理返回错误
@@ -1032,11 +1075,11 @@ func forward(c *gin.Context) {
 			}
 
 			if net.ParseIP(host) != nil {
-				slog.Warn("client request host is IP address, using default upstream", "client_ip", c.ClientIP(), "host", c.Request.Host, "upstream", RegistryMap["default"])
+				slog.Warn("client request host is IP address, using default upstream", "client_ip", c.ClientIP(), "host", c.Request.Host, "upstream", registryMap["default"])
 			} else {
 				u, err := findRegistryURL(c.Request.Host)
 				if err != nil {
-					slog.Warn("registry not found, using default", "host", c.Request.Host, "default", RegistryMap["default"])
+					slog.Warn("registry not found, using default", "host", c.Request.Host, "default", registryMap["default"])
 				} else {
 					req.URL.Scheme = u.Scheme
 					req.URL.Host = u.Host
@@ -1316,12 +1359,12 @@ func main() {
 
 	// 应用配置
 	config := configManager.GetConfig()
-	RegistryMap = config.RegistryMap
+	SetRegistryMap(config.RegistryMap)
 	DomainSuffix = config.DomainSuffix
 	CacheDir = config.CacheDir
 	setLogLevel(config.LogLevel)
 
-	debugLog("DEBUG registry-map: available registries: %v", RegistryMap)
+	debugLog("DEBUG registry-map: available registries: %v", GetRegistryMap())
 
 	// 初始化缓存目录
 	if CacheDir != "" {
@@ -1371,7 +1414,7 @@ func main() {
 	r.Any("/token/*path", forward)
 
 	r.GET("/help", func(c *gin.Context) {
-		c.JSON(http.StatusOK, RegistryMap)
+		c.JSON(http.StatusOK, GetRegistryMap())
 	})
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -1380,8 +1423,17 @@ func main() {
 	})
 
 	// 管理界面 API
+	// 登录速率限制器：每秒最多 5 次登录尝试
+	loginLimiter := rate.NewLimiter(rate.Every(time.Second/5), 5)
+
 	// 登录接口（无需认证）
 	r.POST("/admin/api/login", func(c *gin.Context) {
+		// 检查速率限制
+		if !loginLimiter.Allow() {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many login attempts. Please wait."})
+			return
+		}
+
 		if authManager.password == "" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Admin interface is disabled. Set ADMIN_PASSWORD environment variable to enable."})
 			return
@@ -1447,7 +1499,7 @@ func main() {
 			}
 
 			// 应用配置（实时生效）
-			RegistryMap = newConfig.RegistryMap
+			SetRegistryMap(newConfig.RegistryMap)
 			DomainSuffix = newConfig.DomainSuffix
 			setLogLevel(newConfig.LogLevel)
 
@@ -1490,7 +1542,7 @@ func main() {
 			}
 
 			// 应用配置
-			RegistryMap = config.RegistryMap
+			SetRegistryMap(config.RegistryMap)
 
 			slog.Info("registry added", "name", req.Name, "url", req.URL)
 			c.JSON(http.StatusOK, gin.H{"message": "Registry added successfully"})
@@ -1518,7 +1570,7 @@ func main() {
 			}
 
 			// 应用配置
-			RegistryMap = config.RegistryMap
+			SetRegistryMap(config.RegistryMap)
 
 			slog.Info("registry deleted", "name", name)
 			c.JSON(http.StatusOK, gin.H{"message": "Registry deleted successfully"})
@@ -1571,6 +1623,10 @@ func main() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Cache not enabled"})
 				return
 			}
+
+			// 加锁保护缓存清理操作
+			cacheMutex.Lock()
+			defer cacheMutex.Unlock()
 
 			files, err := os.ReadDir(CacheDir)
 			if err != nil {
