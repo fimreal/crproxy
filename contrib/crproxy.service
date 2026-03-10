@@ -1,0 +1,50 @@
+[Unit]
+Description=Container Registry Proxy
+Documentation=https://github.com/yourusername/crproxy
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crproxy
+Group=crproxy
+WorkingDirectory=/var/lib/crproxy
+
+# Environment variables
+EnvironmentFile=-/etc/default/crproxy
+EnvironmentFile=-/etc/crproxy/crproxy.env
+
+# Main process
+ExecStart=/usr/local/bin/crproxy \
+    -listen ${LISTEN:-:5000} \
+    -cache-dir ${CACHE_DIR:-/var/lib/crproxy/cache} \
+    -log-level ${LOG_LEVEL:-info} \
+    -domain-suffix ${DOMAIN_SUFFIX:-} \
+    -registry-map ${REGISTRY_MAP:-} \
+    -default-registry ${DEFAULT_REGISTRY:-} \
+    -config-file ${CONFIG_FILE:-/etc/crproxy/crproxy-config.json}
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/crproxy /etc/crproxy
+PrivateTmp=true
+
+# Limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Standard output and error
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crproxy
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# crproxy configuration for OpenRC
+# Copy this file to /etc/conf.d/crproxy
+
+# Admin interface password (REQUIRED for admin interface)
+# Generate a strong password: openssl rand -base64 32
+ADMIN_PASSWORD="your_secure_password_here"
+
+# Listen address (default: :5000)
+LISTEN=":5000"
+
+# Cache directory (default: /var/lib/crproxy/cache)
+CACHE_DIR="/var/lib/crproxy/cache"
+
+# Log level: debug, info, warn, error (default: info)
+LOG_LEVEL="info"
+
+# Domain suffix for mirror hosts (e.g., mydomain.com)
+# DOMAIN_SUFFIX="mydomain.com"
+
+# Registry map file path or URL (optional, uses embedded default)
+# REGISTRY_MAP="/etc/crproxy/registrymap.json"
+
+# Default registry URL (optional, overrides registrymap)
+# DEFAULT_REGISTRY="https://registry-1.docker.io"
+
+# Configuration file path (default: /etc/crproxy/crproxy-config.json)
+CONFIG_FILE="/etc/crproxy/crproxy-config.json"
