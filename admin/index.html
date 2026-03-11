@@ -731,7 +731,6 @@
 
     <script>
         let token = localStorage.getItem('admin_token');
-        let updatedVersion = null; // 记录已更新但未重启的版本
 
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
@@ -1069,12 +1068,6 @@
 
         // 检查更新
         async function checkUpdate() {
-            // 如果已经更新过，显示需要重启的状态
-            if (updatedVersion) {
-                showUpdatePendingRestart(updatedVersion);
-                return;
-            }
-
             try {
                 const response = await fetch('/admin/api/update/check', {
                     headers: {'Authorization': `Bearer ${token}`}
@@ -1088,6 +1081,12 @@
                 const info = await response.json();
                 const updateInfoDiv = document.getElementById('update-info');
                 const updateActionsDiv = document.getElementById('update-actions');
+
+                // 如果需要重启，显示重启提示
+                if (info.restartPending) {
+                    showUpdatePendingRestart(info.latestVersion);
+                    return;
+                }
 
                 if (info.hasUpdate) {
                     updateInfoDiv.innerHTML = `
@@ -1151,10 +1150,9 @@
 
                 if (response.ok) {
                     if (data.newVersion) {
-                        // 更新成功，记录新版本并显示需要重启
-                        updatedVersion = data.newVersion;
                         showToast(`✅ 更新成功！新版本: ${data.newVersion}`, 'success');
-                        showUpdatePendingRestart(data.newVersion);
+                        // 重新检查更新状态（后端会检测到文件已更新，返回 restartPending）
+                        setTimeout(checkUpdate, 500);
                     } else {
                         showToast('✅ 已经是最新版本', 'success');
                         btn.disabled = false;

@@ -35,6 +35,12 @@ import (
 
 var version, buildTime string
 
+// 用于检测是否需要重启
+var (
+	initialBinaryModTime time.Time
+	initialBinaryPath    string
+)
+
 const (
 	// cacheWriteTimeout 缓存写入超时时间（5分钟，适合大文件）
 	cacheWriteTimeout = 5 * time.Minute
@@ -1307,6 +1313,85 @@ func checkForUpdate() (*UpdateInfo, error) {
 	return info, nil
 }
 
+// checkWritePermission 检查是否有写入权限
+func checkWritePermission(execPath string) error {
+	// 检查文件所在目录是否可写
+	execDir := filepath.Dir(execPath)
+
+	// 尝试在目标目录创建临时文件来测试写入权限
+	testFile := filepath.Join(execDir, ".write_test")
+	f, err := os.Create(testFile)
+	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("no write permission to %s (permission denied)", execDir)
+		}
+		return fmt.Errorf("cannot write to %s: %w", execDir, err)
+	}
+	f.Close()
+	os.Remove(testFile)
+
+	// 如果可执行文件已存在，检查是否可写
+	if _, err := os.Stat(execPath); err == nil {
+		// 尝试打开文件以写入模式
+		f, err := os.OpenFile(execPath, os.O_WRONLY, 0)
+		if err != nil {
+			if os.IsPermission(err) {
+				return fmt.Errorf("no write permission to executable %s (permission denied)", execPath)
+			}
+			return fmt.Errorf("cannot write to executable %s: %w", execPath, err)
+		}
+		f.Close()
+	}
+
+	return nil
+}
+
+// recordStartupBinaryInfo 记录启动时的二进制文件信息
+func recordStartupBinaryInfo() error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	initialBinaryPath = execPath
+
+	info, err := os.Stat(execPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat executable: %w", err)
+	}
+	initialBinaryModTime = info.ModTime()
+
+	slog.Info("recorded startup binary info", "path", execPath, "modTime", initialBinaryModTime)
+	return nil
+}
+
+// isRestartPending 检查二进制文件是否被更新，需要重启
+func isRestartPending() (bool, error) {
+	// 如果没有记录初始信息，说明没有更新过
+	if initialBinaryPath == "" {
+		return false, nil
+	}
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return false, fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	info, err := os.Stat(execPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat executable: %w", err)
+	}
+
+	// 如果二进制文件的修改时间变了，说明文件被替换了
+	if !info.ModTime().Equal(initialBinaryModTime) {
+		slog.Info("binary modified after startup, restart required",
+			"original", initialBinaryModTime,
+			"current", info.ModTime())
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // performUpdate 执行更新
 func performUpdate() (string, error) {
 	const repo = "fimreal/crproxy"
@@ -1351,6 +1436,16 @@ func performUpdate() (string, error) {
 		return "", nil // 已是最新版本
 	}
 
+	// 检查是否有写入权限
+	if err := checkWritePermission(execPath); err != nil {
+		return "", fmt.Errorf("auto-update failed: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
+	}
+
+	// Windows 系统特殊提示
+	if runtime.GOOS == "windows" {
+		return "", fmt.Errorf("Windows does not support in-place updates\n\nPlease download the new version manually:\nhttps://github.com/%s/releases/tag/%s", repo, latestVersion)
+	}
+
 	// 确定平台和架构
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
@@ -1371,7 +1466,7 @@ func performUpdate() (string, error) {
 	}
 
 	if downloadURL == "" {
-		return "", fmt.Errorf("no binary found for %s/%s (looking for %s)", goos, goarch, assetName)
+		return "", fmt.Errorf("no binary found for %s/%s\n\nPlease download manually:\nhttps://github.com/%s/releases/tag/%s", goos, goarch, repo, latestVersion)
 	}
 
 	slog.Info("downloading new version", "url", downloadURL, "asset", assetName)
@@ -1391,7 +1486,7 @@ func performUpdate() (string, error) {
 	tmpFile := execPath + ".new"
 	out, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
+		return "", fmt.Errorf("failed to create temp file: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
 	}
 
 	// 复制文件内容
@@ -1402,12 +1497,14 @@ func performUpdate() (string, error) {
 	}
 	out.Close()
 
+	slog.Info("new binary downloaded", "path", tmpFile)
+
 	// 备份旧版本
 	backupPath := execPath + ".backup"
 	if _, err := os.Stat(execPath); err == nil {
 		if err := os.Rename(execPath, backupPath); err != nil {
 			os.Remove(tmpFile)
-			return "", fmt.Errorf("failed to backup old binary: %w", err)
+			return "", fmt.Errorf("failed to backup old binary: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
 		}
 		slog.Info("backup created", "path", backupPath)
 	}
@@ -1416,10 +1513,12 @@ func performUpdate() (string, error) {
 	if err := os.Rename(tmpFile, execPath); err != nil {
 		// 恢复备份
 		if _, err := os.Stat(backupPath); err == nil {
-			os.Rename(backupPath, execPath)
+			if restoreErr := os.Rename(backupPath, execPath); restoreErr != nil {
+				slog.Error("failed to restore backup", "error", restoreErr, "backup_path", backupPath)
+			}
 		}
 		os.Remove(tmpFile)
-		return "", fmt.Errorf("failed to replace binary: %w", err)
+		return "", fmt.Errorf("failed to replace binary: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
 	}
 
 	return latestVersion, nil
@@ -1465,6 +1564,11 @@ func main() {
 	// 初始化日志
 	initLogger()
 	setLogLevel(logLevelStr)
+
+	// 记录启动时的二进制文件信息（用于检测更新）
+	if err := recordStartupBinaryInfo(); err != nil {
+		slog.Warn("failed to record startup binary info", "error", err)
+	}
 
 	if showVersion {
 		fmt.Printf("version: %s, build time: %s\n", version, buildTime)
@@ -1830,12 +1934,27 @@ func main() {
 
 		// 检查更新
 		adminAPI.GET("/update/check", func(c *gin.Context) {
+			// 先检查是否需要重启
+			pending, err := isRestartPending()
+			if err != nil {
+				slog.Warn("failed to check restart status", "error", err)
+			}
+
 			info, err := checkForUpdate()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, info)
+
+			// 如果需要重启，在返回信息中标注
+			response := gin.H{
+				"currentVersion": info.CurrentVersion,
+				"latestVersion":  info.LatestVersion,
+				"hasUpdate":      info.HasUpdate,
+				"restartPending": pending,
+			}
+
+			c.JSON(http.StatusOK, response)
 		})
 
 		// 执行更新
