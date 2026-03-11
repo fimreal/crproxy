@@ -621,6 +621,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('config')">⚙️ 配置管理</button>
                 <button class="tab-btn" onclick="switchTab('stats')">📊 运行统计</button>
+                <button class="tab-btn" onclick="switchTab('update')">🔄 系统更新</button>
             </div>
 
             <!-- 配置管理 -->
@@ -639,21 +640,6 @@
                         </thead>
                         <tbody id="registry-tbody"></tbody>
                     </table>
-
-                    <h3 style="margin: 24px 0 16px 0; color: var(--gray-800);">添加新映射</h3>
-                    <div class="form-grid" style="grid-template-columns: 1fr 2fr auto; gap: 16px;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label>名称</label>
-                            <input type="text" id="new-registry-name" placeholder="例如: gcr">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label>URL</label>
-                            <input type="text" id="new-registry-url" placeholder="例如: https://gcr.io">
-                        </div>
-                        <div class="form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
-                            <button class="btn btn-primary" onclick="addRegistry()">➕ 添加</button>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="card">
@@ -688,23 +674,12 @@
                             </div>
                         </div>
                         <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
-                        <button type="button" class="btn btn-primary" onclick="reloadConfig()" style="margin-left: 12px;">🔄 重载配置</button>
                     </form>
                 </div>
             </div>
 
             <!-- 运行统计 -->
             <div id="stats-tab" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">🔄 系统更新</h2>
-                    </div>
-                    <div id="update-info" class="loading">正在检查更新...</div>
-                    <div id="update-actions" style="display: none; margin-top: 16px;">
-                        <button id="update-btn" class="btn btn-primary" onclick="doUpdate()">⬆️ 更新到最新版本</button>
-                    </div>
-                </div>
-
                 <div class="card">
                     <div class="card-header">
                         <h2 class="card-title">📊 请求统计</h2>
@@ -722,6 +697,19 @@
                         <h3>⚠️ 危险操作</h3>
                         <p>清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。</p>
                         <button class="btn btn-danger" onclick="confirmClearCache()">🗑️ 清空缓存</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 系统更新 -->
+            <div id="update-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">🔄 系统更新</h2>
+                    </div>
+                    <div id="update-info" class="loading">正在检查更新...</div>
+                    <div id="update-actions" style="display: none; margin-top: 16px;">
+                        <button id="update-btn" class="btn btn-primary" onclick="doUpdate()">⬆️ 更新到最新版本</button>
                     </div>
                 </div>
             </div>
@@ -743,7 +731,6 @@
 
     <script>
         let token = localStorage.getItem('admin_token');
-        let updateChecked = false;
 
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
@@ -810,6 +797,9 @@
             if (tabName === 'stats') {
                 loadStats();
             }
+            if (tabName === 'update') {
+                checkUpdate();
+            }
         }
 
         // 加载配置
@@ -840,6 +830,15 @@
                         </tr>
                     `;
                 }
+
+                // 添加新行
+                tbody.innerHTML += `
+                    <tr style="background: var(--gray-50);">
+                        <td><input type="text" id="new-registry-name" placeholder="名称" style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 4px;"></td>
+                        <td><input type="text" id="new-registry-url" placeholder="https://example.com" style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 4px;"></td>
+                        <td><button class="btn btn-primary" onclick="addRegistry()">添加</button></td>
+                    </tr>
+                `;
 
                 // 填充服务参数表单
                 document.getElementById('default-registry').value = config.defaultRegistry || '';
@@ -891,31 +890,6 @@
                 }
             } catch (error) {
                 showToast('保存配置失败: ' + error.message, 'error');
-            }
-        }
-
-        // 重载配置
-        async function reloadConfig() {
-            if (!confirm('确定要从配置文件重新加载配置吗？\n这将覆盖当前的所有配置。')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/admin/api/config/reload', {
-                    method: 'POST',
-                    headers: {'Authorization': `Bearer ${token}`}
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showToast('✅ 配置已重新加载', 'success');
-                    loadConfig();
-                } else {
-                    showToast(data.error || '重载失败', 'error');
-                }
-            } catch (error) {
-                showToast('重载配置失败: ' + error.message, 'error');
             }
         }
 
@@ -981,12 +955,6 @@
 
         // 加载统计
         async function loadStats() {
-            // 只在首次加载时检查更新
-            if (!updateChecked) {
-                checkUpdate();
-                updateChecked = true;
-            }
-
             try {
                 // 请求统计
                 const reqResponse = await fetch('/admin/api/stats', {
