@@ -1136,11 +1136,21 @@ func forward(c *gin.Context) {
 				}
 
 				// 修改 realm 地址到本服务
-				reqScheme := "https"
-				if c.Request.TLS == nil {
-					reqScheme = "http"
+				// 优先检查反向代理传递的 X-Forwarded-Proto 头部
+				reqScheme := c.GetHeader("X-Forwarded-Proto")
+				if reqScheme == "" {
+					// 如果没有 X-Forwarded-Proto，检查是否为 TLS 连接
+					if c.Request.TLS != nil {
+						reqScheme = "https"
+					} else {
+						reqScheme = "http"
+					}
 				}
 				reqHost := c.Request.Host
+				// 如果反向代理设置了 X-Forwarded-Host，使用它
+				if fwdHost := c.GetHeader("X-Forwarded-Host"); fwdHost != "" {
+					reqHost = fwdHost
+				}
 				// 把原始 realm 地址拼接到 /token/ 后
 				proxyRealURL := fmt.Sprintf("%s://%s/token/%s", reqScheme, reqHost, realmURL)
 
