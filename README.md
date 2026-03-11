@@ -8,6 +8,8 @@ A universal container image registry proxy that supports domain-based routing.
 - Automatic redirect following (handles 307 redirects internally)
 - Local cache support for image blobs with streaming I/O (low memory usage)
 - Structured JSON logging with request tracing and configurable log levels
+- Web-based admin interface with token authentication
+- Self-update capability from GitHub releases
 - Supports both binary and Docker deployment
 - Simple configuration via command line arguments
 - Health check endpoint (`/healthz`)
@@ -55,6 +57,24 @@ crproxy -listen=:8080 -log-level=debug
 # Or use DEBUG environment variable for backward compatibility
 DEBUG=1 crproxy -listen=:8080
 ```
+
+### Self-Update
+
+Update to the latest version from GitHub releases:
+
+```sh
+# Check and update to the latest stable version
+crproxy -update
+
+# The old binary will be backed up as crproxy.backup
+# Restart the service to use the new version
+```
+
+Features:
+- Downloads the correct binary for your OS and architecture
+- Automatically backs up the old version
+- Only updates to stable releases (no pre-releases)
+- Verifies if already at the latest version
 
 ## Configure Image Registries
 
@@ -159,12 +179,56 @@ docker pull docker.mydomain.com/library/nginx:latest
 | `DEBUG` | Set to `1` to enable debug logging (backward compatibility). Equivalent to `-log-level=debug` |
 | `http_proxy` / `https_proxy` | Optional proxy settings for outbound connections |
 
+## Admin Interface
+
+crproxy provides a web-based admin interface for viewing and editing configuration.
+
+### Enable Admin Interface
+
+Set the admin password via environment variable:
+
+```bash
+# Generate a strong password
+openssl rand -base64 32
+
+# Set the password
+export ADMIN_PASSWORD=your_secure_password_here
+crproxy -listen=:5000
+```
+
+Or set it in the config file (`crproxy-config.json`):
+
+```json
+{
+  "adminPassword": "your_secure_password_here"
+}
+```
+
+### Access Admin Interface
+
+Once configured, access the admin interface at:
+
+```
+http://your-server:5000/admin
+```
+
+### Docker Example
+
+```bash
+docker run -it --rm -p 5000:5000 \
+  -e ADMIN_PASSWORD=your_secure_password \
+  crproxy:latest
+```
+
+**Note**: If `ADMIN_PASSWORD` is not set, the admin interface will be disabled and return a 403 error.
+
 ## API Endpoints
 
 - `GET /healthz` - Health check endpoint, returns `{"status": "ok"}`
 - `GET /help` - Returns the registry map configuration as JSON
 - `GET /v2/*` - Proxy requests to container registries
 - `GET /token/*` - Proxy authentication token requests
+- `GET /admin` - Admin interface (requires password authentication)
 
 ## Cache Feature
 

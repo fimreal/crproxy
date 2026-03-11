@@ -1,0 +1,100 @@
+#!/sbin/openrc-run
+# crproxy init script for OpenRC
+# Copy to /etc/init.d/crproxy
+
+name="crproxy"
+description="Container Registry Proxy"
+
+# Command and arguments
+command="/usr/local/bin/crproxy"
+command_args="
+    -listen ${LISTEN:-:5000}
+    -cache-dir ${CACHE_DIR:-/var/lib/crproxy/cache}
+    -log-level ${LOG_LEVEL:-info}
+    ${DOMAIN_SUFFIX:+-domain-suffix ${DOMAIN_SUFFIX}}
+    ${REGISTRY_MAP:+-registry-map ${REGISTRY_MAP}}
+    ${DEFAULT_REGISTRY:+-default-registry ${DEFAULT_REGISTRY}}
+    -config-file ${CONFIG_FILE:-/etc/crproxy/crproxy-config.json}
+"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+# User and group
+command_user="crproxy:crproxy"
+
+# Logs
+output_log="/var/log/crproxy/stdout.log"
+error_log="/var/log/crproxy/stderr.log"
+
+# Working directory
+directory="/var/lib/crproxy"
+
+# Configuration file
+: ${config_file:="/etc/conf.d/crproxy"}
+if [ -f "$config_file" ]; then
+    . "$config_file"
+fi
+
+# Dependencies
+depend() {
+    need net
+    after firewall
+    use dns
+}
+
+# Pre-start checks
+start_pre() {
+    # Check if command exists
+    if [ ! -x "$command" ]; then
+        eerror "Command not found: $command"
+        return 1
+    fi
+
+    # Check if ADMIN_PASSWORD is set (can also be set in config file)
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        ewarn "ADMIN_PASSWORD not set - set it in config file or env to enable admin interface"
+    fi
+
+    # Create directories if they don't exist
+    checkpath --directory --owner "$command_user" --mode 0755 /var/lib/crproxy
+    checkpath --directory --owner "$command_user" --mode 0755 "${CACHE_DIR:-/var/lib/crproxy/cache}"
+    checkpath --file --owner "$command_user" --mode 0644 "${CONFIG_FILE:-/etc/crproxy/crproxy-config.json}"
+    checkpath --directory --owner "$command_user" --mode 0755 /var/log/crproxy
+
+    # Verify cache directory is writable
+    local cache_dir="${CACHE_DIR:-/var/lib/crproxy/cache}"
+    if [ ! -w "$cache_dir" ] 2>/dev/null; then
+        eerror "Cache directory not writable: $cache_dir"
+        return 1
+    fi
+
+    return 0
+}
+
+# Post-start actions
+start_post() {
+    einfo "crproxy started successfully"
+    if [ -n "$ADMIN_PASSWORD" ]; then
+        einfo "Admin interface available at http://localhost:${LISTEN:-:5000}/admin"
+    fi
+}
+
+# Health check (optional)
+healthcheck() {
+    local listen="${LISTEN:-:5000}"
+    local host="${listen%:*}"
+    local port="${listen#*:}"
+
+    [ -z "$host" ] && host="localhost"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -f "http://${host}:${port}/healthz" >/dev/null 2>&1
+        return $?
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "http://${host}:${port}/healthz" -O /dev/null
+        return $?
+    else
+        ewarn "curl or wget not available for health check"
+        return 0
+    fi
+}

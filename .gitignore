@@ -31,7 +31,12 @@ go.work.sum
 .idea/
 .vscode/
 .cursor/
+.claude/
 
 #  local test
 .tmp/
 bin/
+
+# Config file (generated at runtime)
+crproxy-config.json
+crproxy-config.json.tmp
