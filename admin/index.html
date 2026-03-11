@@ -669,8 +669,9 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>缓存目录 <span class="badge badge-primary">需重启生效</span></label>
-                                <input type="text" id="cache-dir" placeholder="/path/to/cache">
+                                <label>缓存目录 <span class="badge">只读</span></label>
+                                <input type="text" id="cache-dir" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
+                                <small style="color: #666; display: block; margin-top: 4px;">由启动参数 -cache-dir 决定</small>
                             </div>
                         </div>
                         <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
@@ -831,7 +832,7 @@
                 document.getElementById('default-registry').value = config.defaultRegistry || '';
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
                 document.getElementById('log-level').value = config.logLevel || 'info';
-                document.getElementById('cache-dir').value = config.cacheDir || '(未启用)';
+                document.getElementById('cache-dir').value = config.cacheDir || '未启用缓存';
             } catch (error) {
                 showToast('加载配置失败: ' + error.message, 'error');
             }
@@ -852,14 +853,10 @@
 
                 const currentConfig = await currentResponse.json();
 
-                // 只更新修改的字段
-                const cacheDir = document.getElementById('cache-dir').value;
+                // 只更新修改的字段（缓存目录不可修改）
                 currentConfig.defaultRegistry = document.getElementById('default-registry').value;
                 currentConfig.domainSuffix = document.getElementById('domain-suffix').value;
                 currentConfig.logLevel = document.getElementById('log-level').value;
-                if (cacheDir && cacheDir !== '(未启用)') {
-                    currentConfig.cacheDir = cacheDir;
-                }
 
                 // 发送完整配置
                 const response = await fetch('/admin/api/config', {
@@ -874,11 +871,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    let message = '✅ 配置已保存并实时生效';
-                    if (cacheDir && cacheDir !== '(未启用)') {
-                        message += '\n⚠️ 缓存目录修改需要重启服务才能生效';
-                    }
-                    showToast(message, 'success');
+                    showToast('✅ 配置已保存', 'success');
                     loadConfig();
                 } else {
                     showToast(data.error || '保存失败', 'error');
