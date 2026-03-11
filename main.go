@@ -1859,6 +1859,27 @@ func main() {
 				"newVersion":     latestVersion,
 			})
 		})
+
+		// 重载配置
+		adminAPI.POST("/config/reload", func(c *gin.Context) {
+			// 从文件重新加载配置
+			if err := configManager.LoadFromFile(); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to load config file: %v", err)})
+				return
+			}
+
+			// 应用配置
+			config := configManager.GetConfig()
+			SetRegistryMap(config.RegistryMap)
+			DomainSuffix = config.DomainSuffix
+			setLogLevel(config.LogLevel)
+
+			slog.Info("config reloaded", "client_ip", c.ClientIP())
+			c.JSON(http.StatusOK, gin.H{
+				"message": "Configuration reloaded successfully",
+				"config":  config,
+			})
+		})
 	}
 
 	// 管理界面前端页面

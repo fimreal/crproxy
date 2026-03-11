@@ -674,6 +674,7 @@
                             </div>
                         </div>
                         <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
+                        <button type="button" class="btn btn-primary" onclick="reloadConfig()" style="margin-left: 12px;">🔄 重载配置</button>
                     </form>
                 </div>
             </div>
@@ -884,6 +885,31 @@
                 }
             } catch (error) {
                 showToast('保存配置失败: ' + error.message, 'error');
+            }
+        }
+
+        // 重载配置
+        async function reloadConfig() {
+            if (!confirm('确定要从配置文件重新加载配置吗？\n这将覆盖当前的所有配置。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/api/config/reload', {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showToast('✅ 配置已重新加载', 'success');
+                    loadConfig();
+                } else {
+                    showToast(data.error || '重载失败', 'error');
+                }
+            } catch (error) {
+                showToast('重载配置失败: ' + error.message, 'error');
             }
         }
 
