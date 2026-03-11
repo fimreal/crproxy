@@ -705,7 +705,7 @@
             <div id="update-tab" class="tab-content">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">🔄 系统更新</h2>
+                        <h2 class="card-title">🔄 程序更新</h2>
                     </div>
                     <div id="update-info" class="loading">正在检查更新...</div>
                     <div id="update-actions" style="display: none; margin-top: 16px;">
@@ -731,6 +731,7 @@
 
     <script>
         let token = localStorage.getItem('admin_token');
+        let updatedVersion = null; // 记录已更新但未重启的版本
 
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
@@ -1068,6 +1069,12 @@
 
         // 检查更新
         async function checkUpdate() {
+            // 如果已经更新过，显示需要重启的状态
+            if (updatedVersion) {
+                showUpdatePendingRestart(updatedVersion);
+                return;
+            }
+
             try {
                 const response = await fetch('/admin/api/update/check', {
                     headers: {'Authorization': `Bearer ${token}`}
@@ -1114,6 +1121,20 @@
             }
         }
 
+        // 显示更新待重启状态
+        function showUpdatePendingRestart(newVersion) {
+            const updateInfoDiv = document.getElementById('update-info');
+            const updateActionsDiv = document.getElementById('update-actions');
+
+            updateInfoDiv.innerHTML = `
+                <div class="warning-box" style="margin-top: 0;">
+                    <h3>✅ 更新成功</h3>
+                    <p>新版本 <strong>${newVersion}</strong> 已下载，需要重启服务才能生效。</p>
+                </div>
+            `;
+            updateActionsDiv.style.display = 'none';
+        }
+
         // 执行更新
         async function doUpdate() {
             const btn = document.getElementById('update-btn');
@@ -1129,9 +1150,16 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast(`✅ ${data.message}\n新版本: ${data.newVersion}`, 'success');
-                    // 重新检查更新状态
-                    setTimeout(checkUpdate, 1000);
+                    if (data.newVersion) {
+                        // 更新成功，记录新版本并显示需要重启
+                        updatedVersion = data.newVersion;
+                        showToast(`✅ 更新成功！新版本: ${data.newVersion}`, 'success');
+                        showUpdatePendingRestart(data.newVersion);
+                    } else {
+                        showToast('✅ 已经是最新版本', 'success');
+                        btn.disabled = false;
+                        btn.textContent = '⬆️ 更新到最新版本';
+                    }
                 } else {
                     showToast(data.error || '更新失败', 'error');
                     btn.disabled = false;
