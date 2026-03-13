@@ -1412,7 +1412,20 @@ func performUpdate() (string, error) {
 		return "", fmt.Errorf("failed to get executable path: %w", err)
 	}
 
+	execDir := filepath.Dir(execPath)
 	slog.Info("checking for updates", "current_version", version, "executable", execPath)
+
+	// 先检查写入权限（避免无意义的下载）
+	if err := checkWritePermission(execPath); err != nil {
+		// 没有权限，检查是否可以下载到目录
+		newFile := filepath.Join(execDir, "crproxy-new")
+		return "", fmt.Errorf("no write permission for in-place update: %w\n\nManual update:\n  1. Download from: https://github.com/%s/releases/latest\n  2. Or run: wget -O %s https://github.com/%s/releases/download/LATEST/crproxy-%s-%s\n  3. Then: sudo cp %s %s && sudo systemctl restart crproxy", err, repo, newFile, repo, runtime.GOOS, runtime.GOARCH, newFile, execPath)
+	}
+
+	// Windows 不支持原地更新（运行中的程序无法被替换）
+	if runtime.GOOS == "windows" {
+		return "", fmt.Errorf("Windows does not support in-place updates while running.\n\nPlease download manually:\nhttps://github.com/%s/releases/latest", repo)
+	}
 
 	// 获取最新 release 信息
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
@@ -1444,16 +1457,6 @@ func performUpdate() (string, error) {
 	// 检查是否需要更新
 	if latestVersion == version {
 		return "", nil // 已是最新版本
-	}
-
-	// 检查是否有写入权限
-	if err := checkWritePermission(execPath); err != nil {
-		return "", fmt.Errorf("auto-update failed: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
-	}
-
-	// Windows 系统特殊提示
-	if runtime.GOOS == "windows" {
-		return "", fmt.Errorf("Windows does not support in-place updates\n\nPlease download the new version manually:\nhttps://github.com/%s/releases/tag/%s", repo, latestVersion)
 	}
 
 	// 确定平台和架构
@@ -1492,43 +1495,44 @@ func performUpdate() (string, error) {
 		return "", fmt.Errorf("download failed with status %d", downloadResp.StatusCode)
 	}
 
-	// 创建临时文件
-	tmpFile := execPath + ".new"
-	out, err := os.OpenFile(tmpFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	// 下载到运行目录同级
+	newFile := filepath.Join(execDir, assetName+".new")
+	out, err := os.OpenFile(newFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
+		return "", fmt.Errorf("failed to create file %s: %w", newFile, err)
 	}
 
 	// 复制文件内容
-	if _, err := io.Copy(out, downloadResp.Body); err != nil {
+	_, err = io.Copy(out, downloadResp.Body)
+	if err != nil {
 		out.Close()
-		os.Remove(tmpFile)
+		os.Remove(newFile)
 		return "", fmt.Errorf("failed to write binary: %w", err)
 	}
 	out.Close()
 
-	slog.Info("new binary downloaded", "path", tmpFile)
+	slog.Info("new binary downloaded", "path", newFile)
 
-	// 备份旧版本
+	// 删除旧备份（如果存在）
 	backupPath := execPath + ".backup"
-	if _, err := os.Stat(execPath); err == nil {
-		if err := os.Rename(execPath, backupPath); err != nil {
-			os.Remove(tmpFile)
-			return "", fmt.Errorf("failed to backup old binary: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
-		}
-		slog.Info("backup created", "path", backupPath)
+	os.Remove(backupPath)
+
+	// 备份当前版本
+	if err := os.Rename(execPath, backupPath); err != nil {
+		os.Remove(newFile)
+		return "", fmt.Errorf("failed to backup old binary: %w", err)
 	}
+	slog.Info("backup created", "path", backupPath)
 
 	// 替换为新版本
-	if err := os.Rename(tmpFile, execPath); err != nil {
-		// 恢复备份
-		if _, err := os.Stat(backupPath); err == nil {
-			if restoreErr := os.Rename(backupPath, execPath); restoreErr != nil {
-				slog.Error("failed to restore backup", "error", restoreErr, "backup_path", backupPath)
-			}
+	if err := os.Rename(newFile, execPath); err != nil {
+		// 尝试恢复备份
+		if restoreErr := os.Rename(backupPath, execPath); restoreErr != nil {
+			slog.Error("CRITICAL: failed to restore backup", "error", restoreErr, "backup_path", backupPath)
+			return "", fmt.Errorf("CRITICAL: failed to replace binary and restore backup. Binary at: %s, Backup at: %s", newFile, backupPath)
 		}
-		os.Remove(tmpFile)
-		return "", fmt.Errorf("failed to replace binary: %w\n\nPlease update manually:\nhttps://github.com/%s/releases/tag/%s", err, repo, latestVersion)
+		os.Remove(newFile)
+		return "", fmt.Errorf("failed to replace binary (restored from backup): %w", err)
 	}
 
 	return latestVersion, nil
