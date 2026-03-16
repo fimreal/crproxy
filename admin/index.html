@@ -12,29 +12,39 @@
         }
 
         :root {
-            --primary: #5b8def;
-            --primary-dark: #4a7de0;
-            --primary-light: #e8f0fd;
-            --danger: #f87171;
-            --danger-dark: #ef4444;
-            --danger-light: #fef2f2;
-            --success: #6ee7b7;
-            --success-dark: #10b981;
-            --success-light: #f0fdf4;
-            --warning: #fbbf24;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-600: #4b5563;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #dbeafe;
+            --danger: #dc2626;
+            --danger-dark: #b91c1c;
+            --danger-light: #fee2e2;
+            --success: #059669;
+            --success-dark: #047857;
+            --success-light: #d1fae5;
+            --warning: #d97706;
+            --warning-light: #fef3c7;
+            --gray-50: #f8fafc;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            /* 简洁渐变 */
+            --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            --glass-bg: rgba(255, 255, 255, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.5);
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-            background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 100%);
+            background: linear-gradient(180deg, #f0f4f8 0%, #e2e8f0 100%);
             min-height: 100vh;
             color: var(--gray-800);
             line-height: 1.6;
@@ -43,20 +53,44 @@
         .login-container {
             max-width: 420px;
             margin: 100px auto;
-            background: white;
-            padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            background: var(--glass-bg);
+            padding: 48px;
+            border-radius: 24px;
+            box-shadow:
+                0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 2px 4px -1px rgba(0, 0, 0, 0.06),
+                0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            transform: translateY(0);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .login-container:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 10px 15px -3px rgba(0, 0, 0, 0.1),
+                0 4px 6px -2px rgba(0, 0, 0, 0.05),
+                0 25px 50px -12px rgba(0, 0, 0, 0.15);
         }
 
         .login-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
         }
 
         .login-header .icon {
-            font-size: 48px;
-            margin-bottom: 10px;
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 20px;
+            background: var(--gradient-primary);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
         .login-header h1 {
@@ -66,43 +100,50 @@
         }
 
         .login-header p {
-            color: var(--gray-600);
+            color: var(--gray-500);
             margin-top: 8px;
+            font-size: 15px;
         }
 
         .login-form input {
             width: 100%;
-            padding: 14px 16px;
-            margin-bottom: 16px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
             border: 2px solid var(--gray-200);
-            border-radius: 8px;
-            font-size: 15px;
+            border-radius: 12px;
+            font-size: 16px;
             transition: all 0.3s;
+            background: var(--gray-50);
         }
 
         .login-form input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.1);
+            box-shadow: 0 0 0 4px rgba(91, 141, 239, 0.15);
+            background: white;
         }
 
         .login-form button {
             width: 100%;
             padding: 14px;
-            background: var(--primary);
+            background: var(--gradient-primary);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
         }
 
         .login-form button:hover {
-            background: var(--primary-dark);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 6px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .login-form button:active {
+            transform: translateY(0);
         }
 
         .error-message {
@@ -117,15 +158,21 @@
 
         #app {
             display: none;
-            background: var(--gray-50);
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
             min-height: 100vh;
         }
 
         .app-header {
-            background: white;
+            background: rgba(255, 255, 255, 0.9);
             color: var(--gray-800);
-            padding: 24px 0;
+            padding: 16px 0;
             border-bottom: 1px solid var(--gray-200);
+            backdrop-filter: blur(12px) saturate(180%);
+            -webkit-backdrop-filter: blur(12px) saturate(180%);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .app-header .container {
@@ -140,27 +187,32 @@
         .app-header h1 {
             font-size: 24px;
             font-weight: 700;
+            color: var(--gray-900);
         }
 
         .app-header .subtitle {
-            opacity: 0.9;
-            font-size: 14px;
-            margin-top: 4px;
+            font-size: 13px;
+            margin-top: 2px;
+            color: var(--gray-500);
         }
 
         .logout-btn {
-            padding: 10px 20px;
-            background: var(--gray-100);
+            padding: 10px 24px;
+            background: white;
             color: var(--gray-700);
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
+            border: 2px solid var(--gray-200);
+            border-radius: 10px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
         .logout-btn:hover {
-            background: var(--gray-200);
+            background: var(--gray-50);
+            border-color: var(--gray-300);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
         }
 
         .container {
@@ -173,21 +225,22 @@
             background: white;
             margin-bottom: 24px;
             border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             display: flex;
+            padding: 4px;
+            gap: 2px;
         }
 
         .tab-btn {
             flex: 1;
-            padding: 16px 32px;
-            background: white;
+            padding: 12px 24px;
+            background: transparent;
             border: none;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            border-radius: 8px;
             color: var(--gray-600);
         }
 
@@ -197,9 +250,8 @@
         }
 
         .tab-btn.active {
-            border-bottom-color: var(--primary);
-            color: var(--primary);
-            background: white;
+            background: var(--primary);
+            color: white;
         }
 
         .tab-content {
@@ -212,10 +264,11 @@
 
         .card {
             background: white;
-            padding: 32px;
+            padding: 24px;
             border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            border: 1px solid var(--gray-100);
         }
 
         .card-header {
@@ -236,11 +289,12 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
+            font-size: 14px;
         }
 
         th, td {
-            padding: 14px 16px;
+            padding: 12px 16px;
             text-align: left;
             border-bottom: 1px solid var(--gray-200);
         }
@@ -248,8 +302,8 @@
         th {
             background: var(--gray-50);
             font-weight: 600;
-            color: var(--gray-700);
-            font-size: 13px;
+            color: var(--gray-600);
+            font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
@@ -259,13 +313,13 @@
         }
 
         .btn {
-            padding: 8px 16px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 14px;
             font-weight: 600;
-            transition: all 0.3s;
+            transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -290,21 +344,22 @@
         }
 
         .btn-success {
-            background: var(--success-dark);
+            background: var(--success);
             color: white;
         }
 
         .btn-success:hover {
-            background: #059669;
+            background: var(--success-dark);
         }
 
         .btn-secondary {
-            background: var(--gray-200);
+            background: var(--gray-100);
             color: var(--gray-700);
+            border: 1px solid var(--gray-200);
         }
 
         .btn-secondary:hover {
-            background: var(--gray-300);
+            background: var(--gray-200);
         }
 
         .form-grid {
@@ -330,19 +385,25 @@
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 12px 14px;
-            border: 2px solid var(--gray-200);
+            padding: 10px 14px;
+            border: 1px solid var(--gray-300);
             border-radius: 8px;
             font-size: 14px;
-            transition: all 0.3s;
-            height: 46px;
+            transition: all 0.2s;
+            height: 44px;
+            background: white;
         }
 
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.1);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .form-group input:hover,
+        .form-group select:hover {
+            border-color: var(--gray-400);
         }
 
         .form-group input[readonly] {
@@ -366,73 +427,84 @@
             background: white;
             border: 1px solid var(--gray-200);
             color: var(--gray-800);
-            padding: 28px;
+            padding: 24px;
             border-radius: 12px;
             position: relative;
             transition: all 0.2s;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gray-300);
         }
 
         .stat-card:hover {
             border-color: var(--gray-300);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
 
-        .stat-card.green {
-            border-left: 4px solid var(--success-dark);
+        .stat-card.green::before {
+            background: var(--success);
         }
 
         .stat-card.green .stat-value {
             color: var(--success-dark);
         }
 
-        .stat-card.orange {
-            border-left: 4px solid var(--warning);
+        .stat-card.orange::before {
+            background: var(--warning);
         }
 
         .stat-card.orange .stat-value {
-            color: #d97706;
+            color: var(--warning);
         }
 
-        .stat-card.blue {
-            border-left: 4px solid var(--primary);
+        .stat-card.blue::before {
+            background: var(--primary);
         }
 
         .stat-card.blue .stat-value {
             color: var(--primary);
         }
 
-        .stat-card.red {
-            border-left: 4px solid var(--danger-dark);
+        .stat-card.red::before {
+            background: var(--danger);
         }
 
         .stat-card.red .stat-value {
-            color: var(--danger-dark);
+            color: var(--danger);
         }
 
         .stat-value {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 700;
-            margin-bottom: 8px;
-            position: relative;
+            margin-bottom: 4px;
+            color: var(--gray-900);
         }
 
         .stat-label {
             font-size: 14px;
-            opacity: 0.95;
-            position: relative;
+            color: var(--gray-500);
+            font-weight: 500;
         }
 
         .toast {
             position: fixed;
-            top: 24px;
-            right: 24px;
-            padding: 16px 20px;
+            top: 20px;
+            right: 20px;
+            padding: 14px 20px;
             border-radius: 8px;
             color: white;
-            font-weight: 500;
+            font-weight: 600;
             z-index: 1000;
             animation: slideIn 0.3s ease;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
 
         .toast.success {
@@ -444,14 +516,8 @@
         }
 
         @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
         .modal {
@@ -475,26 +541,35 @@
         .modal-content {
             background: white;
             padding: 32px;
-            border-radius: 12px;
-            max-width: 420px;
+            border-radius: 16px;
+            max-width: 400px;
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
         }
 
         .modal-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            background: var(--warning-light);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
         }
 
         .modal-content h3 {
             color: var(--gray-900);
-            font-size: 20px;
-            margin-bottom: 12px;
+            font-size: 18px;
+            margin-bottom: 8px;
+            font-weight: 700;
         }
 
         .modal-content p {
-            margin: 16px 0 24px 0;
-            color: var(--gray-600);
+            margin: 12px 0 24px 0;
+            color: var(--gray-500);
+            font-size: 14px;
         }
 
         .modal-buttons {
@@ -505,27 +580,27 @@
 
         .modal-buttons .btn {
             min-width: 100px;
-            padding: 12px 24px;
         }
 
         .warning-box {
-            margin-top: 32px;
-            padding: 20px;
-            background: #fefce8;
+            margin-top: 24px;
+            padding: 16px;
+            background: var(--warning-light);
             border-radius: 8px;
-            border-left: 4px solid var(--warning);
+            border: 1px solid #fde68a;
         }
 
         .warning-box h3 {
             color: #92400e;
-            margin: 0 0 8px 0;
-            font-size: 16px;
+            margin: 0 0 6px 0;
+            font-size: 14px;
+            font-weight: 700;
         }
 
         .warning-box p {
-            color: #78350f;
-            margin: 0 0 16px 0;
-            font-size: 14px;
+            color: #a16207;
+            margin: 0 0 12px 0;
+            font-size: 13px;
         }
 
         .empty-state {
@@ -550,7 +625,7 @@
             display: inline-block;
             padding: 4px 10px;
             border-radius: 12px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             background: var(--gray-100);
             color: var(--gray-600);
@@ -558,7 +633,7 @@
 
         .badge-primary {
             background: var(--primary-light);
-            color: var(--primary-dark);
+            color: var(--primary);
         }
 
         @media (max-width: 768px) {
@@ -973,15 +1048,15 @@
 
                 document.getElementById('request-stats').innerHTML = `
                     <div class="stat-card">
-                        <div class="stat-value">${totalReqs}</div>
+                        <div class="stat-value">${totalReqs.toLocaleString()}</div>
                         <div class="stat-label">请求总数</div>
                     </div>
                     <div class="stat-card green">
-                        <div class="stat-value">${cacheHits}</div>
+                        <div class="stat-value">${cacheHits.toLocaleString()}</div>
                         <div class="stat-label">缓存命中</div>
                     </div>
                     <div class="stat-card orange">
-                        <div class="stat-value">${reqStats.cacheMisses || 0}</div>
+                        <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
                         <div class="stat-label">缓存未命中</div>
                     </div>
                     <div class="stat-card blue">
@@ -1000,15 +1075,15 @@
                     const sizeInMB = (cacheStats.totalSize / 1024 / 1024).toFixed(2);
                     document.getElementById('cache-stats').innerHTML = `
                         <div class="stat-card">
-                            <div class="stat-value">${cacheStats.blobCount || 0}</div>
+                            <div class="stat-value">${(cacheStats.blobCount || 0).toLocaleString()}</div>
                             <div class="stat-label">缓存镜像层</div>
                         </div>
                         <div class="stat-card green">
-                            <div class="stat-value">${sizeInMB} MB</div>
-                            <div class="stat-label">总大小</div>
+                            <div class="stat-value">${sizeInMB}</div>
+                            <div class="stat-label">总大小 (MB)</div>
                         </div>
                         <div class="stat-card blue">
-                            <div class="stat-value">${cacheStats.totalFiles || 0}</div>
+                            <div class="stat-value">${(cacheStats.totalFiles || 0).toLocaleString()}</div>
                             <div class="stat-label">文件总数</div>
                         </div>
                     `;
