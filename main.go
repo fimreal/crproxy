@@ -1224,7 +1224,7 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		c.Next()
 
 		// 排除不需要统计和记录日志的路径
-		excludePaths := []string{"/healthz", "/admin"}
+		excludePaths := []string{"/healthz", "/admin", "/help", "/favicon.ico"}
 		shouldSkip := false
 		for _, excludePath := range excludePaths {
 			if path == excludePath || strings.HasPrefix(path, excludePath+"/") {
@@ -1237,8 +1237,12 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 			return
 		}
 
-		// 收集统计数据
-		if statsCollector != nil {
+		// 只统计代理请求（/v2/ 和 /token/ 路径）
+		isProxyRequest := strings.HasPrefix(path, "/v2/") || strings.HasPrefix(path, "/token/")
+		status := c.Writer.Status()
+
+		// 收集统计数据（只统计成功的代理请求）
+		if statsCollector != nil && isProxyRequest && status >= 200 && status < 400 {
 			statsCollector.IncrementRequests()
 			cacheStatus := c.Writer.Header().Get("X-Cache")
 			if cacheStatus == "HIT" {
@@ -1250,7 +1254,6 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 
 		// 记录访问日志
 		latency := time.Since(start)
-		status := c.Writer.Status()
 		size := c.Writer.Size()
 		requestID, _ := c.Get("requestID")
 		cacheStatus := c.Writer.Header().Get("X-Cache")
@@ -1417,9 +1420,7 @@ func performUpdate() (string, error) {
 
 	// 先检查写入权限（避免无意义的下载）
 	if err := checkWritePermission(execPath); err != nil {
-		// 没有权限，检查是否可以下载到目录
-		newFile := filepath.Join(execDir, "crproxy-new")
-		return "", fmt.Errorf("no write permission for in-place update: %w\n\nManual update:\n  1. Download from: https://github.com/%s/releases/latest\n  2. Or run: wget -O %s https://github.com/%s/releases/download/LATEST/crproxy-%s-%s\n  3. Then: sudo cp %s %s && sudo systemctl restart crproxy", err, repo, newFile, repo, runtime.GOOS, runtime.GOARCH, newFile, execPath)
+		return "", fmt.Errorf("no write permission for in-place update: %w\n\nPlease update manually:\n  1. Visit: https://github.com/%s/releases/latest\n  2. Download the latest version for your platform\n  3. Replace the binary: sudo cp <downloaded-file> %s\n  4. Restart the service: sudo systemctl restart crproxy", err, repo, execPath)
 	}
 
 	// Windows 不支持原地更新（运行中的程序无法被替换）
@@ -1887,14 +1888,20 @@ func main() {
 			}
 
 			var totalSize int64
-			var fileCount int
+			var blobCount int
+			var metaCount int
 			err := filepath.Walk(CacheDir, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
 				if !info.IsDir() {
-					totalSize += info.Size()
-					fileCount++
+					// 分别统计 blob 和 meta 文件
+					if strings.HasSuffix(path, blobSuffix) {
+						totalSize += info.Size()
+						blobCount++
+					} else if strings.HasSuffix(path, metaSuffix) {
+						metaCount++
+					}
 				}
 				return nil
 			})
@@ -1905,10 +1912,13 @@ func main() {
 			}
 
 			c.JSON(http.StatusOK, gin.H{
-				"enabled":   true,
-				"dir":       CacheDir,
-				"totalSize": totalSize,
-				"fileCount": fileCount,
+				"enabled":    true,
+				"dir":        CacheDir,
+				"totalSize":  totalSize,
+				"blobCount":  blobCount, // 实际缓存的镜像层数量
+				"metaCount":  metaCount, // 元数据文件数量
+				"fileCount":  blobCount, // 保持兼容性，实际是 blob 数量
+				"totalFiles": blobCount + metaCount,
 			})
 		})
 

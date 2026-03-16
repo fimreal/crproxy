@@ -1000,12 +1000,16 @@
                     const sizeInMB = (cacheStats.totalSize / 1024 / 1024).toFixed(2);
                     document.getElementById('cache-stats').innerHTML = `
                         <div class="stat-card">
-                            <div class="stat-value">${cacheStats.fileCount}</div>
-                            <div class="stat-label">缓存文件数</div>
+                            <div class="stat-value">${cacheStats.blobCount || 0}</div>
+                            <div class="stat-label">缓存镜像层</div>
                         </div>
                         <div class="stat-card green">
                             <div class="stat-value">${sizeInMB} MB</div>
                             <div class="stat-label">总大小</div>
+                        </div>
+                        <div class="stat-card blue">
+                            <div class="stat-value">${cacheStats.totalFiles || 0}</div>
+                            <div class="stat-label">文件总数</div>
                         </div>
                     `;
                 } else {
