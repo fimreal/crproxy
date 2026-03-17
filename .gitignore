@@ -40,3 +40,6 @@ bin/
 # Config file (generated at runtime)
 crproxy-config.json
 crproxy-config.json.tmp
+
+# Binary file (built at compile time)
+crproxy

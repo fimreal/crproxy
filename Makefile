@@ -16,22 +16,22 @@ $(BINDIR):
 all: $(PLATFORM_LIST)
 
 build: $(BINDIR)
-	$(GOBUILD) -o $(BINDIR)/$(NAME) main.go
+	$(GOBUILD) -o $(BINDIR)/$(NAME) .
 
 linux-amd64: $(BINDIR)
-	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-linux-amd64 main.go
+	GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-linux-amd64 .
 
 linux-arm64: $(BINDIR)
-	GOOS=linux GOARCH=arm64 $(GOBUILD) -o $(BINDIR)/$(NAME)-linux-arm64 main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) -o $(BINDIR)/$(NAME)-linux-arm64 .
 
 darwin-amd64: $(BINDIR)
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-darwin-amd64 main.go
+	GOOS=darwin GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-darwin-amd64 .
 
 darwin-arm64: $(BINDIR)
-	GOOS=darwin GOARCH=arm64 $(GOBUILD) -o $(BINDIR)/$(NAME)-darwin-arm64 main.go
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) -o $(BINDIR)/$(NAME)-darwin-arm64 .
 
 windows-amd64: $(BINDIR)
-	GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-windows-amd64.exe main.go
+	GOOS=windows GOARCH=amd64 $(GOBUILD) -o $(BINDIR)/$(NAME)-windows-amd64.exe .
 
 docker:
 	docker build --build-arg APP_NAME=$(NAME) -t $(NAME) .
