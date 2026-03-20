@@ -8,13 +8,61 @@ A universal container image registry proxy that supports domain-based routing.
 - Automatic redirect following (handles 307 redirects internally)
 - Local cache support for image blobs with streaming I/O (low memory usage)
 - Structured JSON logging with request tracing and configurable log levels
-- Web-based admin interface with token authentication
-- Self-update capability from GitHub releases
+- Web-based admin interface with token authentication (full version only)
+- Self-update capability from GitHub releases (full version only)
 - Supports both binary and Docker deployment
 - Simple configuration via command line arguments
 - Health check endpoint (`/healthz`)
 - Registry information endpoint (`/help`)
 - Supports both SHA256 and SHA512 digest algorithms
+
+## Versions
+
+crproxy provides two versions to meet different deployment needs:
+
+### Full Version (Default)
+
+Complete functionality with all features enabled:
+- Web-based admin interface with authentication
+- Runtime configuration via config file
+- Statistics collection and monitoring
+- Self-update capability
+- Containerd configuration help page
+
+**Build:**
+```sh
+make build
+# or
+go build -o crproxy .
+```
+
+### Lite Version
+
+Minimal version with only core proxy and cache functionality:
+- Core registry proxy with domain-based routing
+- Local blob caching with streaming I/O
+- Structured JSON logging
+- Health check endpoint
+- ~50% smaller binary size (~12MB vs ~23MB)
+
+**Removed features:**
+- Web admin interface and authentication
+- Statistics collection
+- Config file support (command-line args only)
+- Self-update capability
+- Containerd help page
+
+**Use cases:**
+- Resource-constrained environments (edge, IoT, small VPS)
+- Simple proxy-only deployments
+- CI/CD pipelines where minimal footprint matters
+
+**Build:**
+```sh
+make build-lite
+# or
+go build -tags lite -o crproxy-lite .
+```
 
 ## Quick Start
 
@@ -32,9 +80,17 @@ go run main.go
 ```
 
 ### Run with Docker
+
+**Full version:**
 ```sh
 docker build -t crproxy .
 docker run -it --rm -p 8080:8080 crproxy -listen=:8080
+```
+
+**Lite version:**
+```sh
+docker build -f Dockerfile.lite -t crproxy:lite .
+docker run -it --rm -p 8080:8080 crproxy:lite -listen=:8080
 ```
 
 ### Run with Cache Enabled
@@ -58,7 +114,7 @@ crproxy -listen=:8080 -log-level=debug
 DEBUG=1 crproxy -listen=:8080
 ```
 
-### Self-Update
+### Self-Update (Full Version Only)
 
 Update to the latest version from GitHub releases:
 
@@ -161,25 +217,37 @@ docker pull docker.mydomain.com/library/nginx:latest
 
 ## Command Line Arguments
 
+### Common Arguments (Both Versions)
+
 | Argument | Default | Description |
 |----------|----------|-------------|
 | `-listen` | `:5000` | Backend listen address and port |
 | `-domain-suffix` | (empty) | Domain suffix for mirror hosts, e.g. `mydomain.com`. If empty, uses default registry as upstream |
-| `-registry-map` | (embedded) | Registry map file path or URL. Defaults to embedded `registrymap.json` |
-| `-default-registry` | (empty) | Default registry URL to use when no domain suffix is configured or when accessing via IP address. Overrides the `default` key in registry map |
+| `-registry-map` | (embedded) | Registry map file path. Defaults to embedded `registrymap.json`. **Note:** Lite version only supports local file path, not URL |
+| `-default-registry` | (empty) | Default registry URL to use when no domain suffix is configured or when accessing via IP address |
 | `-cache-dir` | (empty) | Local cache directory for caching image blobs. Disabled if empty. Only caches blobs, not manifests |
 | `-log-level` | `info` | Log level: debug, info, warn, error |
 | `-help` | - | Show help information |
 | `-version` | - | Show version and build time |
 
+### Full Version Only Arguments
+
+| Argument | Default | Description |
+|----------|----------|-------------|
+| `-config-file` | `./crproxy-config.json` | Configuration file path for runtime configuration |
+| `-update` | - | Update to latest version from GitHub releases |
+
+**Note:** Lite version only supports command-line arguments. Configuration file and self-update features are not available in the lite version.
+
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `DEBUG` | Set to `1` to enable debug logging (backward compatibility). Equivalent to `-log-level=debug` |
-| `http_proxy` / `https_proxy` | Optional proxy settings for outbound connections |
+| Variable | Description | Version |
+|----------|-------------|---------|
+| `DEBUG` | Set to `1` to enable debug logging (backward compatibility). Equivalent to `-log-level=debug` | Both |
+| `http_proxy` / `https_proxy` | Optional proxy settings for outbound connections | Both |
+| `ADMIN_PASSWORD` | Admin interface password. If not set, admin interface is disabled | Full only |
 
-## Admin Interface
+## Admin Interface (Full Version Only)
 
 crproxy provides a web-based admin interface for viewing and editing configuration.
 
@@ -214,21 +282,29 @@ http://your-server:5000/admin
 
 ### Docker Example
 
+**Full version (with admin interface):**
 ```bash
 docker run -it --rm -p 5000:5000 \
   -e ADMIN_PASSWORD=your_secure_password \
   crproxy:latest
 ```
 
+**Lite version (no admin interface):**
+```bash
+docker run -it --rm -p 5000:5000 \
+  crproxy:lite -listen=:5000 -cache-dir=/cache
+```
+
 **Note**: If `ADMIN_PASSWORD` is not set, the admin interface will be disabled and return a 403 error.
 
 ## API Endpoints
 
-- `GET /healthz` - Health check endpoint, returns `{"status": "ok"}`
-- `GET /help` - Returns the registry map configuration as JSON
-- `GET /v2/*` - Proxy requests to container registries
-- `GET /token/*` - Proxy authentication token requests
-- `GET /admin` - Admin interface (requires password authentication)
+- `GET /healthz` - Health check endpoint, returns `{"status": "ok"}` (both versions)
+- `GET /help` - Returns the registry map configuration as JSON (full version only)
+- `GET /v2/*` - Proxy requests to container registries (both versions)
+- `GET /token/*` - Proxy authentication token requests (both versions)
+- `GET /admin` - Admin interface (requires password authentication, full version only)
+- `GET /containerd` - Containerd configuration help page (full version only)
 
 ## Cache Feature
 
