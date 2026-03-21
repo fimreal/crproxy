@@ -43,3 +43,6 @@ crproxy-config.json.tmp
 
 # Binary file (built at compile time)
 crproxy
+
+# Design docs
+docs/plans/

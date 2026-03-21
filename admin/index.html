@@ -12,41 +12,117 @@
         }
 
         :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --primary-light: #dbeafe;
-            --danger: #dc2626;
-            --danger-dark: #b91c1c;
-            --danger-light: #fee2e2;
-            --success: #059669;
-            --success-dark: #047857;
-            --success-light: #d1fae5;
-            --warning: #d97706;
-            --warning-light: #fef3c7;
-            --gray-50: #f8fafc;
-            --gray-100: #f1f5f9;
-            --gray-200: #e2e8f0;
-            --gray-300: #cbd5e1;
-            --gray-400: #94a3b8;
-            --gray-500: #64748b;
-            --gray-600: #475569;
-            --gray-700: #334155;
-            --gray-800: #1e293b;
-            --gray-900: #0f172a;
+            /* 主色调：绿色系 (Octopus 风格) */
+            --primary: oklch(0.65 0.12 145);
+            --primary-dark: oklch(0.58 0.11 145);
+            --primary-light: oklch(0.75 0.10 145);
 
-            /* 简洁渐变 */
-            --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --glass-border: rgba(255, 255, 255, 0.5);
+            /* 背景 */
+            --background: oklch(0.98 0.01 85);
+            --background-secondary: oklch(0.94 0.01 90);
+
+            /* 文字 */
+            --foreground: oklch(0.20 0.02 150);
+            --foreground-muted: oklch(0.50 0.02 85);
+
+            /* 卡片 */
+            --card: oklch(0.99 0.005 150);
+            --card-border: oklch(0.88 0.01 90);
+
+            /* 功能色 */
+            --danger: oklch(0.58 0.15 25);
+            --danger-dark: oklch(0.50 0.14 25);
+            --danger-light: oklch(0.95 0.05 25);
+            --success: oklch(0.65 0.12 150);
+            --success-dark: oklch(0.58 0.11 150);
+            --success-light: oklch(0.95 0.03 150);
+            --warning: oklch(0.70 0.15 80);
+            --warning-light: oklch(0.95 0.05 80);
+
+            /* 边框和输入 */
+            --border: oklch(0.88 0.01 90);
+            --input: oklch(0.88 0.01 90);
+
+            /* 渐变 */
+            --gradient-primary: linear-gradient(135deg, oklch(0.68 0.12 145) 0%, oklch(0.65 0.12 145) 100%);
+            --gradient-success: linear-gradient(135deg, oklch(0.68 0.12 145) 0%, oklch(0.65 0.12 145) 100%);
+            --gradient-warning: linear-gradient(135deg, oklch(0.72 0.15 80) 0%, oklch(0.70 0.15 80) 100%);
+
+            /* 玻璃效果 */
+            --glass-bg: oklch(0.99 0.005 150 / 0.85);
+            --glass-border: oklch(0.88 0.01 90 / 0.5);
+
+            /* 阴影 */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+
+            /* 圆角 */
+            --radius: 0.5rem;
+
+            /* 灰度色阶（保持向后兼容） */
+            --gray-50: oklch(0.98 0.01 85);
+            --gray-100: oklch(0.94 0.01 90);
+            --gray-200: oklch(0.88 0.01 90);
+            --gray-300: oklch(0.80 0.02 90);
+            --gray-400: oklch(0.65 0.02 85);
+            --gray-500: oklch(0.50 0.02 85);
+            --gray-600: oklch(0.40 0.02 85);
+            --gray-700: oklch(0.30 0.02 85);
+            --gray-800: oklch(0.22 0.02 150);
+            --gray-900: oklch(0.15 0.02 150);
+        }
+
+        /* 暗色主题 */
+        [data-theme="dark"] {
+            --primary: oklch(0.70 0.13 145);
+            --primary-dark: oklch(0.65 0.12 145);
+            --primary-light: oklch(0.75 0.12 145);
+
+            --background: oklch(0.15 0.02 150);
+            --background-secondary: oklch(0.18 0.02 150);
+
+            --foreground: oklch(0.92 0.01 85);
+            --foreground-muted: oklch(0.65 0.02 85);
+
+            --card: oklch(0.18 0.02 150);
+            --card-border: oklch(0.30 0.02 150);
+
+            --danger: oklch(0.62 0.18 25);
+            --danger-dark: oklch(0.55 0.16 25);
+            --danger-light: oklch(0.30 0.10 25);
+            --success: oklch(0.70 0.13 145);
+            --success-dark: oklch(0.65 0.12 145);
+            --success-light: oklch(0.25 0.05 145);
+            --warning: oklch(0.72 0.16 80);
+            --warning-light: oklch(0.30 0.08 80);
+
+            --border: oklch(0.30 0.02 150);
+            --input: oklch(0.30 0.02 150);
+
+            --glass-bg: oklch(0.18 0.02 150 / 0.85);
+            --glass-border: oklch(0.30 0.02 150 / 0.5);
+
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3);
+
+            --gray-50: oklch(0.20 0.02 150);
+            --gray-100: oklch(0.25 0.02 150);
+            --gray-200: oklch(0.30 0.02 150);
+            --gray-300: oklch(0.40 0.02 150);
+            --gray-400: oklch(0.50 0.02 85);
+            --gray-500: oklch(0.60 0.02 85);
+            --gray-600: oklch(0.70 0.02 85);
+            --gray-700: oklch(0.80 0.01 85);
+            --gray-800: oklch(0.88 0.01 85);
+            --gray-900: oklch(0.95 0.01 85);
         }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
-            background: linear-gradient(180deg, #f0f4f8 0%, #e2e8f0 100%);
+            background: var(--background);
             min-height: 100vh;
-            color: var(--gray-800);
+            color: var(--foreground);
             line-height: 1.6;
         }
 
@@ -90,17 +166,17 @@
             align-items: center;
             justify-content: center;
             font-size: 36px;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 4px 12px oklch(0.65 0.12 145 / 0.3);
         }
 
         .login-header h1 {
-            color: var(--gray-900);
+            color: var(--foreground);
             font-size: 28px;
             font-weight: 700;
         }
 
         .login-header p {
-            color: var(--gray-500);
+            color: var(--foreground-muted);
             margin-top: 8px;
             font-size: 15px;
         }
@@ -109,18 +185,19 @@
             width: 100%;
             padding: 16px 20px;
             margin-bottom: 20px;
-            border: 2px solid var(--gray-200);
+            border: 2px solid var(--input);
             border-radius: 12px;
             font-size: 16px;
             transition: all 0.3s;
-            background: var(--gray-50);
+            background: var(--card);
+            color: var(--foreground);
         }
 
         .login-form input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(91, 141, 239, 0.15);
-            background: white;
+            box-shadow: 0 0 0 4px oklch(0.65 0.12 145 / 0.15);
+            background: var(--card);
         }
 
         .login-form button {
@@ -163,16 +240,16 @@
         }
 
         .app-header {
-            background: rgba(255, 255, 255, 0.9);
-            color: var(--gray-800);
+            background: var(--glass-bg);
+            color: var(--foreground);
             padding: 16px 0;
-            border-bottom: 1px solid var(--gray-200);
+            border-bottom: 1px solid var(--card-border);
             backdrop-filter: blur(12px) saturate(180%);
             -webkit-backdrop-filter: blur(12px) saturate(180%);
             position: sticky;
             top: 0;
             z-index: 100;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow);
         }
 
         .app-header .container {
@@ -187,20 +264,20 @@
         .app-header h1 {
             font-size: 24px;
             font-weight: 700;
-            color: var(--gray-900);
+            color: var(--foreground);
         }
 
         .app-header .subtitle {
             font-size: 13px;
             margin-top: 2px;
-            color: var(--gray-500);
+            color: var(--foreground-muted);
         }
 
         .logout-btn {
             padding: 10px 24px;
-            background: white;
-            color: var(--gray-700);
-            border: 2px solid var(--gray-200);
+            background: var(--card);
+            color: var(--foreground);
+            border: 2px solid var(--border);
             border-radius: 10px;
             font-weight: 600;
             cursor: pointer;
@@ -209,10 +286,39 @@
         }
 
         .logout-btn:hover {
-            background: var(--gray-50);
-            border-color: var(--gray-300);
+            background: var(--background-secondary);
+            border-color: var(--input);
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn-icon {
+            padding: 0.5rem;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--foreground);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-icon:hover {
+            background: var(--background-secondary);
+            border-color: var(--input);
+        }
+
+        .btn-icon svg {
+            width: 20px;
+            height: 20px;
         }
 
         .container {
@@ -659,6 +765,29 @@
             }
         }
 
+        /* Toast 动画 */
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
         /* 确保 toast 支持多行 */
         .toast {
             white-space: pre-line;
@@ -671,11 +800,11 @@
         <div class="login-header">
             <div class="icon">🔐</div>
             <h1>crproxy</h1>
-            <p>容器镜像代理管理控制台</p>
+            <p data-i18n="loginSubtitle">容器镜像代理管理控制台</p>
         </div>
         <form class="login-form" onsubmit="handleLogin(event)">
-            <input type="password" id="password" placeholder="输入管理密码" required>
-            <button type="submit">登录</button>
+            <input type="password" id="password" data-i18n-placeholder="password" placeholder="输入管理密码" required>
+            <button type="submit" data-i18n="login">登录</button>
         </form>
         <div id="login-error" class="error-message" style="display: none;"></div>
     </div>
@@ -685,32 +814,62 @@
         <div class="app-header">
             <div class="container">
                 <div>
-                    <h1>🚀 crproxy 管理控制台</h1>
-                    <div class="subtitle">容器镜像代理配置管理系统</div>
+                    <h1>🚀 <span data-i18n="loginTitle">crproxy 管理控制台</span></h1>
+                    <div class="subtitle" data-i18n="loginSubtitle">容器镜像代理配置管理系统</div>
                 </div>
-                <button class="logout-btn" onclick="logout()">退出登录</button>
+                <div class="nav-actions">
+                    <button id="theme-toggle" class="btn-icon" title="切换主题">
+                        <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                        <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                        <svg class="icon-auto" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                    </button>
+                    <button id="lang-toggle" class="btn-icon" title="切换语言">EN</button>
+                    <button class="logout-btn" onclick="logout()"><span data-i18n="logout">退出登录</span></button>
+                </div>
             </div>
         </div>
 
         <div class="container">
             <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('config')">⚙️ 配置管理</button>
-                <button class="tab-btn" onclick="switchTab('stats')">📊 运行统计</button>
-                <button class="tab-btn" onclick="switchTab('update')">🔄 系统更新</button>
+                <button class="tab-btn active" onclick="switchTab('config')">⚙️ <span data-i18n="configTab">配置管理</span></button>
+                <button class="tab-btn" onclick="switchTab('stats')">📊 <span data-i18n="statsTab">运行统计</span></button>
+                <button class="tab-btn" onclick="switchTab('update')">🔄 <span data-i18n="updateTab">系统更新</span></button>
             </div>
 
             <!-- 配置管理 -->
             <div id="config-tab" class="tab-content active">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">📦 Registry 映射配置</h2>
+                        <h2 class="card-title">📦 <span data-i18n="registryConfig">Registry 映射配置</span></h2>
                     </div>
                     <table id="registry-table">
                         <thead>
                             <tr>
-                                <th>名称</th>
+                                <th data-i18n="registryName">名称</th>
                                 <th>URL</th>
-                                <th style="width: 120px;">操作</th>
+                                <th style="width: 120px;" data-i18n="operation">操作</th>
                             </tr>
                         </thead>
                         <tbody id="registry-tbody"></tbody>
@@ -719,22 +878,22 @@
 
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">⚙️ 服务参数配置</h2>
+                        <h2 class="card-title">⚙️ <span data-i18n="serviceConfig">服务参数配置</span></h2>
                     </div>
                     <form id="service-config-form">
                         <div class="form-grid">
                             <div class="form-group">
-                                <label>默认 Registry</label>
+                                <label data-i18n="defaultRegistry">默认 Registry</label>
                                 <input type="text" id="default-registry" placeholder="https://registry-1.docker.io">
                             </div>
                             <div class="form-group">
-                                <label>域名后缀</label>
-                                <input type="text" id="domain-suffix" placeholder="例如: mydomain.com">
+                                <label data-i18n="domainSuffix">域名后缀</label>
+                                <input type="text" id="domain-suffix" data-i18n-placeholder="domainSuffixPlaceholder" placeholder="例如: mydomain.com">
                             </div>
                         </div>
                         <div class="form-grid">
                             <div class="form-group">
-                                <label>日志级别</label>
+                                <label data-i18n="logLevel">日志级别</label>
                                 <select id="log-level">
                                     <option value="debug">Debug</option>
                                     <option value="info">Info</option>
@@ -743,12 +902,12 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>缓存目录 <span class="badge">只读</span></label>
+                                <label><span data-i18n="cacheDir">缓存目录</span> <span class="badge" data-i18n="readonly">只读</span></label>
                                 <input type="text" id="cache-dir" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
-                                <small style="color: #666; display: block; margin-top: 4px;">由启动参数 -cache-dir 决定</small>
+                                <small style="color: #666; display: block; margin-top: 4px;" data-i18n="cacheDirNote">由启动参数 -cache-dir 决定</small>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-success" onclick="saveConfig()">💾 保存配置</button>
+                        <button type="button" class="btn btn-success" onclick="saveConfig()">💾 <span data-i18n="save">保存配置</span></button>
                     </form>
                 </div>
             </div>
@@ -757,21 +916,21 @@
             <div id="stats-tab" class="tab-content">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">📊 请求统计</h2>
+                        <h2 class="card-title">📊 <span data-i18n="requestStats">请求统计</span></h2>
                     </div>
                     <div class="stats-grid" id="request-stats"></div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">💾 缓存统计</h2>
+                        <h2 class="card-title">💾 <span data-i18n="cacheStats">缓存统计</span></h2>
                     </div>
                     <div class="stats-grid" id="cache-stats"></div>
 
                     <div class="warning-box">
-                        <h3>⚠️ 危险操作</h3>
-                        <p>清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。</p>
-                        <button class="btn btn-danger" onclick="confirmClearCache()">🗑️ 清空缓存</button>
+                        <h3>⚠️ <span data-i18n="dangerOperation">危险操作</span></h3>
+                        <p data-i18n="clearCacheWarning">清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。</p>
+                        <button class="btn btn-danger" onclick="confirmClearCache()">🗑️ <span data-i18n="clearCache">清空缓存</span></button>
                     </div>
                 </div>
             </div>
@@ -780,11 +939,11 @@
             <div id="update-tab" class="tab-content">
                 <div class="card">
                     <div class="card-header">
-                        <h2 class="card-title">🔄 程序更新</h2>
+                        <h2 class="card-title">🔄 <span data-i18n="programUpdate">程序更新</span></h2>
                     </div>
-                    <div id="update-info" class="loading">正在检查更新...</div>
+                    <div id="update-info" class="loading" data-i18n="checkingUpdate">正在检查更新...</div>
                     <div id="update-actions" style="display: none; margin-top: 16px;">
-                        <button id="update-btn" class="btn btn-primary" onclick="doUpdate()">⬆️ 更新到最新版本</button>
+                        <button id="update-btn" class="btn btn-primary" onclick="doUpdate()">⬆️ <span data-i18n="updateToLatest">更新到最新版本</span></button>
                     </div>
                 </div>
             </div>
@@ -795,20 +954,459 @@
     <div id="confirm-modal" class="modal">
         <div class="modal-content">
             <div class="modal-icon">⚠️</div>
-            <h3>确认清空缓存？</h3>
-            <p>此操作将删除所有缓存文件，无法恢复。</p>
+            <h3 data-i18n="confirmClearCacheTitle">确认清空缓存？</h3>
+            <p data-i18n="confirmClearCacheMessage">此操作将删除所有缓存文件，无法恢复。</p>
             <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
-                <button class="btn btn-danger" onclick="clearCache()">确认清空</button>
+                <button class="btn btn-secondary" onclick="closeModal()"><span data-i18n="cancel">取消</span></button>
+                <button class="btn btn-danger" onclick="clearCache()"><span data-i18n="confirmClearCacheBtn">确认清空</span></button>
             </div>
         </div>
     </div>
 
     <script>
+        // 主题管理
+        const ThemeManager = {
+            userPreference: 'auto',
+
+            init() {
+                const savedPreference = localStorage.getItem('theme-preference') || 'auto';
+                this.userPreference = savedPreference;
+                this.applyTheme();
+                this.watchSystemTheme();
+                this.updateIcon();
+            },
+
+            getSystemTheme() {
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            },
+
+            applyTheme() {
+                let theme;
+                if (this.userPreference === 'auto') {
+                    theme = this.getSystemTheme();
+                } else {
+                    theme = this.userPreference;
+                }
+                document.documentElement.setAttribute('data-theme', theme);
+            },
+
+            updateIcon() {
+                const sunIcon = document.querySelector('.icon-sun');
+                const moonIcon = document.querySelector('.icon-moon');
+                const autoIcon = document.querySelector('.icon-auto');
+
+                if (!sunIcon || !moonIcon || !autoIcon) return;
+
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'none';
+                autoIcon.style.display = 'none';
+
+                if (this.userPreference === 'auto') {
+                    autoIcon.style.display = 'block';
+                } else if (this.userPreference === 'dark') {
+                    moonIcon.style.display = 'block';
+                } else {
+                    sunIcon.style.display = 'block';
+                }
+            },
+
+            toggle() {
+                const modes = ['auto', 'light', 'dark'];
+                const currentIndex = modes.indexOf(this.userPreference);
+                const nextIndex = (currentIndex + 1) % modes.length;
+                this.userPreference = modes[nextIndex];
+
+                localStorage.setItem('theme-preference', this.userPreference);
+                this.applyTheme();
+                this.updateIcon();
+
+                const messages = {
+                    auto: '跟随系统',
+                    light: '亮色主题',
+                    dark: '暗色主题'
+                };
+                if (window.I18n) {
+                    const langMessages = {
+                        auto: I18n.t('themeAuto'),
+                        light: I18n.t('themeLight'),
+                        dark: I18n.t('themeDark')
+                    };
+                    showToast(langMessages[this.userPreference], 'info');
+                } else {
+                    showToast(messages[this.userPreference], 'info');
+                }
+            },
+
+            watchSystemTheme() {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                mediaQuery.addEventListener('change', (e) => {
+                    if (this.userPreference === 'auto') {
+                        this.applyTheme();
+                    }
+                });
+            }
+        };
+
+        // 国际化管理
+        const I18n = {
+            currentLang: 'zh',
+
+            translations: {
+                zh: {
+                    // 主题
+                    themeAuto: '跟随系统',
+                    themeLight: '亮色主题',
+                    themeDark: '暗色主题',
+
+                    // 语言
+                    langToggle: 'EN',
+
+                    // 通用
+                    save: '保存',
+                    cancel: '取消',
+                    delete: '删除',
+                    edit: '编辑',
+                    add: '添加',
+                    confirm: '确认',
+                    loading: '加载中...',
+
+                    // 导航
+                    dashboard: '控制台',
+                    configTab: '配置管理',
+                    statsTab: '运行统计',
+                    updateTab: '系统更新',
+                    logout: '退出登录',
+
+                    // 登录
+                    login: '登录',
+                    password: '密码',
+                    passwordPlaceholder: '输入管理密码',
+                    loginError: '密码错误',
+                    loginTitle: 'crproxy 管理控制台',
+                    loginSubtitle: '容器镜像代理配置管理系统',
+
+                    // 配置
+                    listenAddr: '监听地址',
+                    cacheConfig: '缓存配置',
+                    enableCache: '启用缓存',
+                    maxSize: '最大大小',
+                    expireTime: '过期时间',
+                    authConfig: '认证配置',
+                    enableAuth: '启用认证',
+                    username: '用户名',
+
+                    // Registry
+                    registryName: '名称',
+                    sourceAddr: '源地址',
+                    targetAddr: '目标地址',
+                    addRegistry: '添加 Registry',
+                    deleteConfirm: '确认删除此 Registry？',
+                    registryConfig: 'Registry 映射配置',
+                    operation: '操作',
+
+                    // 服务配置
+                    serviceConfig: '服务参数配置',
+                    defaultRegistry: '默认 Registry',
+                    domainSuffix: '域名后缀',
+                    domainSuffixPlaceholder: '例如: mydomain.com',
+                    logLevel: '日志级别',
+                    cacheDir: '缓存目录',
+                    cacheDirNote: '由启动参数 -cache-dir 决定',
+                    saveConfig: '保存配置',
+                    cacheNotEnabled: '未启用缓存',
+                    readonly: '只读',
+                    configRestartNote: '部分配置需要重启服务后生效',
+
+                    // 统计
+                    totalRequests: '总请求数',
+                    cacheHits: '缓存命中',
+                    hitRate: '命中率',
+                    uploadTraffic: '上传流量',
+                    downloadTraffic: '下载流量',
+                    cacheSize: '缓存大小',
+                    fileCount: '文件数量',
+                    clearCache: '清空缓存',
+                    clearCacheConfirm: '确认清空缓存？',
+                    requestStats: '请求统计',
+                    cacheStats: '缓存统计',
+                    dangerOperation: '危险操作',
+                    clearCacheWarning: '清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。',
+                    requestTotal: '请求总数',
+                    cacheMisses: '缓存未命中',
+                    cachedLayers: '缓存镜像层',
+                    totalSizeMB: '总大小 (MB)',
+                    totalFiles: '文件总数',
+                    notEnabled: '未启用',
+                    cacheStatus: '缓存状态',
+                    loadStatsFailed: '加载统计失败',
+
+                    // 更新
+                    currentVersion: '当前版本',
+                    checkUpdate: '检查更新',
+                    newVersion: '新版本',
+                    doUpdate: '执行更新',
+                    upToDate: '已是最新版本',
+                    updateConfirm: '确认执行更新？',
+                    newVersionAvailable: '发现新版本',
+                    updateNote: '更新说明',
+                    systemUpdate: '系统更新',
+                    programUpdate: '程序更新',
+                    checkingUpdate: '正在检查更新...',
+                    updateToLatest: '更新到最新版本',
+                    latestVersion: '最新版本',
+                    checkUpdateFailed: '检查更新失败',
+                    downloadedRestartNeeded: '已下载，需要重启服务才能生效',
+                    updating: '更新中...',
+                    alreadyLatestVersion: '已经是最新版本',
+                    updateFailed: '更新失败',
+
+                    // 确认对话框
+                    confirmClearCacheTitle: '确认清空缓存？',
+                    confirmClearCacheMessage: '此操作将删除所有缓存文件，无法恢复。',
+                    confirmClearCacheBtn: '确认清空',
+
+                    // 消息
+                    saveSuccess: '保存成功',
+                    saveFailed: '保存失败',
+                    deleteSuccess: '删除成功',
+                    updateSuccess: '更新成功',
+                    networkError: '网络错误',
+                    operationSuccess: '操作成功',
+                    operationFailed: '操作失败',
+                    loadConfigFailed: '加载配置失败',
+                    getCurrentConfigFailed: '获取当前配置失败',
+                    configSaved: '配置已保存',
+                    saveConfigFailed: '保存配置失败',
+                    pleaseFillNameAndUrl: '请填写名称和URL',
+                    addSuccess: '添加成功',
+                    addFailed: '添加失败',
+                    deleteFailed: '删除失败',
+                    cacheCleared: '缓存已清空',
+                    deleted: '删除了',
+                    files: '个文件',
+                    clearCacheFailed: '清空缓存失败',
+                },
+
+                en: {
+                    // Theme
+                    themeAuto: 'Auto',
+                    themeLight: 'Light Theme',
+                    themeDark: 'Dark Theme',
+
+                    // Language
+                    langToggle: '中文',
+
+                    // Common
+                    save: 'Save',
+                    cancel: 'Cancel',
+                    delete: 'Delete',
+                    edit: 'Edit',
+                    add: 'Add',
+                    confirm: 'Confirm',
+                    loading: 'Loading...',
+
+                    // Navigation
+                    dashboard: 'Dashboard',
+                    configTab: 'Config',
+                    statsTab: 'Statistics',
+                    updateTab: 'Update',
+                    logout: 'Logout',
+
+                    // Login
+                    login: 'Login',
+                    password: 'Password',
+                    passwordPlaceholder: 'Enter admin password',
+                    loginError: 'Invalid password',
+                    loginTitle: 'crproxy Admin Console',
+                    loginSubtitle: 'Container Registry Proxy Configuration',
+
+                    // Config
+                    listenAddr: 'Listen Address',
+                    cacheConfig: 'Cache Config',
+                    enableCache: 'Enable Cache',
+                    maxSize: 'Max Size',
+                    expireTime: 'Expire Time',
+                    authConfig: 'Auth Config',
+                    enableAuth: 'Enable Auth',
+                    username: 'Username',
+
+                    // Registry
+                    registryName: 'Name',
+                    sourceAddr: 'Source',
+                    targetAddr: 'Target',
+                    addRegistry: 'Add Registry',
+                    deleteConfirm: 'Confirm delete this registry?',
+                    registryConfig: 'Registry Mapping',
+                    operation: 'Operation',
+
+                    // Service Config
+                    serviceConfig: 'Service Configuration',
+                    defaultRegistry: 'Default Registry',
+                    domainSuffix: 'Domain Suffix',
+                    domainSuffixPlaceholder: 'e.g., mydomain.com',
+                    logLevel: 'Log Level',
+                    cacheDir: 'Cache Directory',
+                    cacheDirNote: 'Determined by -cache-dir flag',
+                    saveConfig: 'Save Configuration',
+                    cacheNotEnabled: 'Cache not enabled',
+                    readonly: 'Read-only',
+                    configRestartNote: 'Some changes require service restart to take effect',
+
+                    // Stats
+                    totalRequests: 'Total Requests',
+                    cacheHits: 'Cache Hits',
+                    hitRate: 'Hit Rate',
+                    uploadTraffic: 'Upload',
+                    downloadTraffic: 'Download',
+                    cacheSize: 'Cache Size',
+                    fileCount: 'File Count',
+                    clearCache: 'Clear Cache',
+                    clearCacheConfirm: 'Confirm clear cache?',
+                    requestStats: 'Request Statistics',
+                    cacheStats: 'Cache Statistics',
+                    dangerOperation: 'Dangerous Operation',
+                    clearCacheWarning: 'Clearing cache will delete all cached image layers. Future requests will re-download from source.',
+                    requestTotal: 'Total Requests',
+                    cacheMisses: 'Cache Misses',
+                    cachedLayers: 'Cached Layers',
+                    totalSizeMB: 'Total Size (MB)',
+                    totalFiles: 'Total Files',
+                    notEnabled: 'Not Enabled',
+                    cacheStatus: 'Cache Status',
+                    loadStatsFailed: 'Failed to load statistics',
+
+                    // Update
+                    currentVersion: 'Current Version',
+                    checkUpdate: 'Check Update',
+                    newVersion: 'New Version',
+                    doUpdate: 'Update Now',
+                    upToDate: 'Already up to date',
+                    updateConfirm: 'Confirm update?',
+                    newVersionAvailable: 'New Version Available',
+                    updateNote: 'Release Notes',
+                    systemUpdate: 'System Update',
+                    programUpdate: 'Program Update',
+                    checkingUpdate: 'Checking for updates...',
+                    updateToLatest: 'Update to Latest Version',
+                    latestVersion: 'Latest Version',
+                    checkUpdateFailed: 'Failed to check for updates',
+                    downloadedRestartNeeded: 'downloaded, restart required to apply',
+                    updating: 'Updating...',
+                    alreadyLatestVersion: 'Already on latest version',
+                    updateFailed: 'Update failed',
+
+                    // Confirm Dialog
+                    confirmClearCacheTitle: 'Confirm Clear Cache?',
+                    confirmClearCacheMessage: 'This will delete all cached files and cannot be undone.',
+                    confirmClearCacheBtn: 'Confirm Clear',
+
+                    // Messages
+                    saveSuccess: 'Saved successfully',
+                    saveFailed: 'Save failed',
+                    deleteSuccess: 'Deleted successfully',
+                    updateSuccess: 'Updated successfully',
+                    networkError: 'Network error',
+                    operationSuccess: 'Operation successful',
+                    operationFailed: 'Operation failed',
+                    loadConfigFailed: 'Failed to load configuration',
+                    getCurrentConfigFailed: 'Failed to get current configuration',
+                    configSaved: 'Configuration saved',
+                    saveConfigFailed: 'Failed to save configuration',
+                    pleaseFillNameAndUrl: 'Please fill in name and URL',
+                    addSuccess: 'Added successfully',
+                    addFailed: 'Add failed',
+                    deleteFailed: 'Delete failed',
+                    cacheCleared: 'Cache cleared',
+                    deleted: 'Deleted',
+                    files: 'files',
+                    clearCacheFailed: 'Failed to clear cache',
+                }
+            },
+
+            t(key) {
+                return this.translations[this.currentLang][key] || key;
+            },
+
+            setLanguage(lang) {
+                this.currentLang = lang;
+                localStorage.setItem('lang', lang);
+                this.updateUI();
+            },
+
+            updateUI() {
+                // 更新 data-i18n 元素
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    el.textContent = this.t(key);
+                });
+
+                // 更新 data-i18n-placeholder 元素
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    el.placeholder = this.t(key);
+                });
+
+                // 更新语言切换按钮
+                const langBtn = document.getElementById('lang-toggle');
+                if (langBtn) {
+                    langBtn.textContent = this.t('langToggle');
+                }
+
+                // 更新缓存目录输入框（如果值为空或显示"未启用缓存"）
+                const cacheDirInput = document.getElementById('cache-dir');
+                if (cacheDirInput && (!cacheDirInput.value || cacheDirInput.value.includes('未启用') || cacheDirInput.value.includes('not enabled'))) {
+                    cacheDirInput.value = this.t('cacheNotEnabled');
+                }
+            },
+
+            init() {
+                // 优先级：1. 用户手动设置  2. 浏览器语言  3. 默认中文
+                let savedLang = localStorage.getItem('lang');
+
+                if (!savedLang) {
+                    // 自动检测浏览器语言
+                    const browserLang = navigator.language || navigator.userLanguage;
+                    // 如果浏览器语言是中文（zh, zh-CN, zh-TW等），则使用中文
+                    if (browserLang && browserLang.toLowerCase().startsWith('zh')) {
+                        savedLang = 'zh';
+                    } else {
+                        // 其他语言默认使用英文
+                        savedLang = 'en';
+                    }
+                    // 保存自动检测的语言（但不标记为用户手动设置）
+                }
+
+                this.setLanguage(savedLang);
+            }
+        };
+
         let token = localStorage.getItem('admin_token');
 
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', () => {
+            // 初始化主题
+            ThemeManager.init();
+
+            // 绑定主题切换按钮
+            const themeToggle = document.getElementById('theme-toggle');
+            if (themeToggle) {
+                themeToggle.addEventListener('click', () => {
+                    ThemeManager.toggle();
+                });
+            }
+
+            // 初始化国际化
+            I18n.init();
+
+            // 绑定语言切换按钮
+            const langToggle = document.getElementById('lang-toggle');
+            if (langToggle) {
+                langToggle.addEventListener('click', () => {
+                    const newLang = I18n.currentLang === 'zh' ? 'en' : 'zh';
+                    I18n.setLanguage(newLang);
+                });
+            }
+
             if (token) {
                 showApp();
             }
@@ -852,6 +1450,35 @@
             loadStats();
             // 自动刷新统计
             setInterval(loadStats, 5000);
+        }
+
+        // Toast 通知
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                padding: 14px 28px;
+                background: var(--card);
+                color: var(--foreground);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                box-shadow: var(--shadow-lg);
+                z-index: 999;
+                animation: slideIn 0.3s ease;
+                font-size: 14px;
+                font-weight: 500;
+            `;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
         }
 
         // 退出登录
@@ -900,7 +1527,7 @@
                             <td><strong>${name}</strong></td>
                             <td>${url}</td>
                             <td>
-                                ${name !== 'default' ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')">删除</button>` : ''}
+                                ${name !== 'default' ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')"><span data-i18n="delete">删除</span></button>` : ''}
                             </td>
                         </tr>
                     `;
@@ -909,9 +1536,9 @@
                 // 添加新行
                 tbody.innerHTML += `
                     <tr style="background: var(--gray-50);">
-                        <td><input type="text" id="new-registry-name" placeholder="名称" style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 4px;"></td>
+                        <td><input type="text" id="new-registry-name" data-i18n-placeholder="registryName" placeholder="${I18n.t('registryName')}" style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 4px;"></td>
                         <td><input type="text" id="new-registry-url" placeholder="https://example.com" style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 4px;"></td>
-                        <td><button class="btn btn-primary" onclick="addRegistry()">添加</button></td>
+                        <td><button class="btn btn-primary" onclick="addRegistry()">${I18n.t('add')}</button></td>
                     </tr>
                 `;
 
@@ -919,9 +1546,9 @@
                 document.getElementById('default-registry').value = config.defaultRegistry || '';
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
                 document.getElementById('log-level').value = config.logLevel || 'info';
-                document.getElementById('cache-dir').value = config.cacheDir || '未启用缓存';
+                document.getElementById('cache-dir').value = config.cacheDir || I18n.t('cacheNotEnabled');
             } catch (error) {
-                showToast('加载配置失败: ' + error.message, 'error');
+                showToast(I18n.t('loadConfigFailed') + ': ' + error.message, 'error');
             }
         }
 
@@ -934,7 +1561,7 @@
                 });
 
                 if (!currentResponse.ok) {
-                    showToast('获取当前配置失败', 'error');
+                    showToast(I18n.t('getCurrentConfigFailed'), 'error');
                     return;
                 }
 
@@ -958,13 +1585,13 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('✅ 配置已保存', 'success');
+                    showToast('✅ ' + I18n.t('configSaved') + '\n' + I18n.t('configRestartNote'), 'success');
                     loadConfig();
                 } else {
-                    showToast(data.error || '保存失败', 'error');
+                    showToast(data.error || I18n.t('saveFailed'), 'error');
                 }
             } catch (error) {
-                showToast('保存配置失败: ' + error.message, 'error');
+                showToast(I18n.t('saveConfigFailed') + ': ' + error.message, 'error');
             }
         }
 
@@ -974,7 +1601,7 @@
             const url = document.getElementById('new-registry-url').value.trim();
 
             if (!name || !url) {
-                showToast('请填写名称和URL', 'error');
+                showToast(I18n.t('pleaseFillNameAndUrl'), 'error');
                 return;
             }
 
@@ -991,15 +1618,15 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('✅ 添加成功', 'success');
+                    showToast('✅ ' + I18n.t('addSuccess'), 'success');
                     document.getElementById('new-registry-name').value = '';
                     document.getElementById('new-registry-url').value = '';
                     loadConfig();
                 } else {
-                    showToast(data.error || '添加失败', 'error');
+                    showToast(data.error || I18n.t('addFailed'), 'error');
                 }
             } catch (error) {
-                showToast('添加失败: ' + error.message, 'error');
+                showToast(I18n.t('addFailed') + ': ' + error.message, 'error');
             }
         }
 
@@ -1018,13 +1645,13 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast('✅ 删除成功', 'success');
+                    showToast('✅ ' + I18n.t('deleteSuccess'), 'success');
                     loadConfig();
                 } else {
-                    showToast(data.error || '删除失败', 'error');
+                    showToast(data.error || I18n.t('deleteFailed'), 'error');
                 }
             } catch (error) {
-                showToast('删除失败: ' + error.message, 'error');
+                showToast(I18n.t('deleteFailed') + ': ' + error.message, 'error');
             }
         }
 
@@ -1049,19 +1676,19 @@
                 document.getElementById('request-stats').innerHTML = `
                     <div class="stat-card">
                         <div class="stat-value">${totalReqs.toLocaleString()}</div>
-                        <div class="stat-label">请求总数</div>
+                        <div class="stat-label">${I18n.t('requestTotal')}</div>
                     </div>
                     <div class="stat-card green">
                         <div class="stat-value">${cacheHits.toLocaleString()}</div>
-                        <div class="stat-label">缓存命中</div>
+                        <div class="stat-label">${I18n.t('cacheHits')}</div>
                     </div>
                     <div class="stat-card orange">
                         <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
-                        <div class="stat-label">缓存未命中</div>
+                        <div class="stat-label">${I18n.t('cacheMisses')}</div>
                     </div>
                     <div class="stat-card blue">
                         <div class="stat-value">${hitRate}%</div>
-                        <div class="stat-label">命中率</div>
+                        <div class="stat-label">${I18n.t('hitRate')}</div>
                     </div>
                 `;
 
@@ -1076,27 +1703,27 @@
                     document.getElementById('cache-stats').innerHTML = `
                         <div class="stat-card">
                             <div class="stat-value">${(cacheStats.blobCount || 0).toLocaleString()}</div>
-                            <div class="stat-label">缓存镜像层</div>
+                            <div class="stat-label">${I18n.t('cachedLayers')}</div>
                         </div>
                         <div class="stat-card green">
                             <div class="stat-value">${sizeInMB}</div>
-                            <div class="stat-label">总大小 (MB)</div>
+                            <div class="stat-label">${I18n.t('totalSizeMB')}</div>
                         </div>
                         <div class="stat-card blue">
                             <div class="stat-value">${(cacheStats.totalFiles || 0).toLocaleString()}</div>
-                            <div class="stat-label">文件总数</div>
+                            <div class="stat-label">${I18n.t('totalFiles')}</div>
                         </div>
                     `;
                 } else {
                     document.getElementById('cache-stats').innerHTML = `
                         <div class="stat-card">
-                            <div class="stat-value">未启用</div>
-                            <div class="stat-label">缓存状态</div>
+                            <div class="stat-value">${I18n.t('notEnabled')}</div>
+                            <div class="stat-label">${I18n.t('cacheStatus')}</div>
                         </div>
                     `;
                 }
             } catch (error) {
-                console.error('加载统计失败:', error);
+                console.error(I18n.t('loadStatsFailed') + ':', error);
             }
         }
 
@@ -1123,25 +1750,45 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    showToast(`✅ 缓存已清空，删除了 ${data.deleted} 个文件`, 'success');
+                    showToast(`✅ ${I18n.t('cacheCleared')}, ${I18n.t('deleted')} ${data.deleted} ${I18n.t('files')}`, 'success');
                     loadStats();
                 } else {
-                    showToast(data.error || '清空失败', 'error');
+                    showToast(data.error || I18n.t('clearCacheFailed'), 'error');
                 }
             } catch (error) {
-                showToast('清空缓存失败: ' + error.message, 'error');
+                showToast(I18n.t('clearCacheFailed') + ': ' + error.message, 'error');
             }
         }
 
         // Toast 通知
-        function showToast(message, type = 'success') {
+        // 显示 Toast 通知（兼容旧版本）
+        function showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            toast.textContent = message;
+            // 支持多行文本
+            toast.innerHTML = message.replace(/\n/g, '<br>');
+            toast.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                padding: 14px 28px;
+                background: var(--card);
+                color: var(--foreground);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                box-shadow: var(--shadow-lg);
+                z-index: 999;
+                animation: slideIn 0.3s ease;
+                font-size: 14px;
+                font-weight: 500;
+                line-height: 1.5;
+            `;
+
             document.body.appendChild(toast);
 
             setTimeout(() => {
-                toast.remove();
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
             }, 3000);
         }
 
@@ -1172,11 +1819,11 @@
                         <div class="stats-grid" style="margin-bottom: 0;">
                             <div class="stat-card">
                                 <div class="stat-value">${info.currentVersion}</div>
-                                <div class="stat-label">当前版本</div>
+                                <div class="stat-label">${I18n.t('currentVersion')}</div>
                             </div>
                             <div class="stat-card green">
                                 <div class="stat-value">${info.latestVersion}</div>
-                                <div class="stat-label">最新版本</div>
+                                <div class="stat-label">${I18n.t('latestVersion')}</div>
                             </div>
                         </div>
                     `;
@@ -1186,7 +1833,7 @@
                         <div class="stats-grid" style="margin-bottom: 0;">
                             <div class="stat-card green">
                                 <div class="stat-value">${info.currentVersion}</div>
-                                <div class="stat-label">当前版本 (已是最新)</div>
+                                <div class="stat-label">${I18n.t('currentVersion')} (${I18n.t('upToDate')})</div>
                             </div>
                         </div>
                     `;
@@ -1194,7 +1841,7 @@
                 }
             } catch (error) {
                 document.getElementById('update-info').innerHTML = `
-                    <div style="color: var(--danger);">检查更新失败: ${error.message}</div>
+                    <div style="color: var(--danger);">${I18n.t('checkUpdateFailed')}: ${error.message}</div>
                 `;
             }
         }
@@ -1206,8 +1853,8 @@
 
             updateInfoDiv.innerHTML = `
                 <div class="warning-box" style="margin-top: 0;">
-                    <h3>✅ 更新成功</h3>
-                    <p>新版本 <strong>${newVersion}</strong> 已下载，需要重启服务才能生效。</p>
+                    <h3>✅ ${I18n.t('updateSuccess')}</h3>
+                    <p>${I18n.t('newVersion')} <strong>${newVersion}</strong> ${I18n.t('downloadedRestartNeeded')}</p>
                 </div>
             `;
             updateActionsDiv.style.display = 'none';
@@ -1217,7 +1864,7 @@
         async function doUpdate() {
             const btn = document.getElementById('update-btn');
             btn.disabled = true;
-            btn.textContent = '⏳ 更新中...';
+            btn.textContent = '⏳ ' + I18n.t('updating');
 
             try {
                 const response = await fetch('/admin/api/update', {
@@ -1229,23 +1876,23 @@
 
                 if (response.ok) {
                     if (data.newVersion) {
-                        showToast(`✅ 更新成功！新版本: ${data.newVersion}`, 'success');
+                        showToast(`✅ ${I18n.t('updateSuccess')}！${I18n.t('newVersion')}: ${data.newVersion}`, 'success');
                         // 重新检查更新状态（后端会检测到文件已更新，返回 restartPending）
                         setTimeout(checkUpdate, 500);
                     } else {
-                        showToast('✅ 已经是最新版本', 'success');
+                        showToast('✅ ' + I18n.t('alreadyLatestVersion'), 'success');
                         btn.disabled = false;
-                        btn.textContent = '⬆️ 更新到最新版本';
+                        btn.textContent = '⬆️ ' + I18n.t('updateToLatest');
                     }
                 } else {
-                    showToast(data.error || '更新失败', 'error');
+                    showToast(data.error || I18n.t('updateFailed'), 'error');
                     btn.disabled = false;
-                    btn.textContent = '⬆️ 更新到最新版本';
+                    btn.textContent = '⬆️ ' + I18n.t('updateToLatest');
                 }
             } catch (error) {
-                showToast('更新失败: ' + error.message, 'error');
+                showToast(I18n.t('updateFailed') + ': ' + error.message, 'error');
                 btn.disabled = false;
-                btn.textContent = '⬆️ 更新到最新版本';
+                btn.textContent = '⬆️ ' + I18n.t('updateToLatest');
             }
         }
     </script>
