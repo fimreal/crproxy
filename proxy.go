@@ -231,13 +231,17 @@ func forward(c *gin.Context) {
 			if net.ParseIP(host) != nil {
 				slog.Warn("client request host is IP address, using default upstream", "client_ip", c.ClientIP(), "host", c.Request.Host, "upstream", registryMap["default"])
 			} else {
-				u, err := findRegistryURL(c.Request.Host)
-				if err != nil {
-					slog.Warn("registry not found, using default", "host", c.Request.Host, "default", registryMap["default"])
-				} else {
-					req.URL.Scheme = u.Scheme
-					req.URL.Host = u.Host
-					req.Host = u.Host
+				// 只有在启用 DomainSuffix 模式时，才做基于域名的 registry 路由查找。
+				// 单上游模式（DomainSuffix == ""）直接使用默认 upstream，避免无意义的告警日志。
+				if DomainSuffix != "" {
+					u, err := findRegistryURL(c.Request.Host)
+					if err != nil {
+						slog.Warn("registry not found, using default", "host", c.Request.Host, "default", registryMap["default"])
+					} else {
+						req.URL.Scheme = u.Scheme
+						req.URL.Host = u.Host
+						req.Host = u.Host
+					}
 				}
 			}
 
@@ -286,7 +290,7 @@ func forward(c *gin.Context) {
 				}
 			}
 
-			debugLog("DEBUG %s %s -> %s://%s%s",
+			debugLogf("DEBUG %s %s -> %s://%s%s",
 				c.Request.Method,
 				c.Request.URL.RequestURI(),
 				req.URL.Scheme,
@@ -329,7 +333,7 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				debugLog("DEBUG modified Www-Authenticate: %s", newWWWAuth)
+				debugLogf("DEBUG modified Www-Authenticate: %s", newWWWAuth)
 			}
 
 			// 写入缓存（同步读取响应体，异步写入文件）

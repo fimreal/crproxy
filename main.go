@@ -131,12 +131,12 @@ func main() {
 
 	// 应用配置
 	config := configManager.GetConfig()
-	SetRegistryMap(config.RegistryMap)
+	SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
 	DomainSuffix = config.DomainSuffix
 	CacheDir = config.CacheDir
 	setLogLevel(config.LogLevel)
 
-	debugLog("DEBUG registry-map: available registries: %v", GetRegistryMap())
+	debugLogf("DEBUG registry-map: available registries: %v", GetRegistryMap())
 
 	// 初始化缓存目录
 	if CacheDir != "" {

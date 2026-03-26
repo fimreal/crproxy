@@ -167,7 +167,7 @@ func readFromCache(c *gin.Context) bool {
 	reader := bufio.NewReaderSize(blobFile, 32*1024) // 32KB buffer
 	c.DataFromReader(meta.StatusCode, blobInfo.Size(), contentType, reader, nil)
 
-	debugLog("DEBUG cache HIT: %s (size: %d)", c.Request.URL.Path, blobInfo.Size())
+	debugLogf("DEBUG cache HIT: %s (size: %d)", c.Request.URL.Path, blobInfo.Size())
 	return true
 }
 
@@ -200,7 +200,7 @@ func cleanStaleTempFiles() {
 			// 如果文件存在时间超过超时时间，删除它
 			if time.Since(info.ModTime()) > cacheWriteTimeout {
 				if err := tryRemoveFile(path); err == nil {
-					debugLog("DEBUG cleaned stale temp file: %s", path)
+					debugLogf("DEBUG cleaned stale temp file: %s", path)
 				}
 			}
 		}
@@ -469,5 +469,5 @@ func finishCacheWrite(digest string, cw *cacheWriter) {
 		tryRemoveFile(cw.metaPath)
 	}
 
-	debugLog("DEBUG cache saved: %s (size: %d)", cw.blobPath, cw.writer.Size())
+	debugLogf("DEBUG cache saved: %s (size: %d)", cw.blobPath, cw.writer.Size())
 }

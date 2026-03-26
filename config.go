@@ -37,6 +37,20 @@ func SetRegistryMap(m map[string]string) {
 	registryMap.Store(m)
 }
 
+// effectiveRegistryMap returns an immutable map to be stored as the active registry map.
+// It applies DefaultRegistry override by writing to the "default" key.
+// It always returns a fresh map to avoid accidental mutation by callers.
+func effectiveRegistryMap(m map[string]string, defaultRegistry string) map[string]string {
+	out := make(map[string]string, len(m)+1)
+	for k, v := range m {
+		out[k] = v
+	}
+	if defaultRegistry != "" {
+		out["default"] = defaultRegistry
+	}
+	return out
+}
+
 // Config 动态配置结构
 type Config struct {
 	RegistryMap     map[string]string `json:"registryMap"`
@@ -84,15 +98,29 @@ func (cm *ConfigManager) UpdateConfig(newConfig Config) error {
 
 	// 验证配置
 	if newConfig.DefaultRegistry != "" {
-		if _, err := url.Parse(newConfig.DefaultRegistry); err != nil {
+		u, err := url.Parse(newConfig.DefaultRegistry)
+		if err != nil {
 			return fmt.Errorf("invalid default-registry URL: %w", err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("invalid default-registry scheme: %s", u.Scheme)
+		}
+		if u.Host == "" {
+			return fmt.Errorf("invalid default-registry host: empty")
 		}
 	}
 
 	// 验证 RegistryMap 中的 URL
 	for name, registryURL := range newConfig.RegistryMap {
-		if _, err := url.Parse(registryURL); err != nil {
+		u, err := url.Parse(registryURL)
+		if err != nil {
 			return fmt.Errorf("invalid registry URL for %s: %w", name, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("invalid registry scheme for %s: %s", name, u.Scheme)
+		}
+		if u.Host == "" {
+			return fmt.Errorf("invalid registry host for %s: empty", name)
 		}
 	}
 
@@ -204,7 +232,8 @@ func loadRegistryMap(source string) (map[string]string, error) {
 		for k, v := range registryMap {
 			if k != "default" && v != "" {
 				// 验证 URL 格式
-				if _, err := url.Parse(v); err == nil {
+				u, err := url.Parse(v)
+				if err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
 					registryMap["default"] = v
 					break
 				}
