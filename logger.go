@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -50,12 +49,6 @@ func generateRequestID() string {
 func debugLog(msg string, args ...any) {
 	if Debug {
 		slog.Debug(msg, args...)
-	}
-}
-
-func debugLogf(format string, args ...any) {
-	if Debug {
-		slog.Debug(fmt.Sprintf(format, args...))
 	}
 }
 

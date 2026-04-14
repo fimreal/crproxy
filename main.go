@@ -136,7 +136,7 @@ func main() {
 	CacheDir = config.CacheDir
 	setLogLevel(config.LogLevel)
 
-	debugLogf("DEBUG registry-map: available registries: %v", GetRegistryMap())
+	debugLog("registry-map available registries", "registries", GetRegistryMap())
 
 	// 初始化缓存目录
 	if CacheDir != "" {

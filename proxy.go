@@ -290,12 +290,10 @@ func forward(c *gin.Context) {
 				}
 			}
 
-			debugLogf("DEBUG %s %s -> %s://%s%s",
-				c.Request.Method,
-				c.Request.URL.RequestURI(),
-				req.URL.Scheme,
-				req.URL.Host,
-				req.URL.RequestURI())
+			debugLog("proxy request",
+				"method", c.Request.Method,
+				"from", c.Request.URL.RequestURI(),
+				"to", fmt.Sprintf("%s://%s%s", req.URL.Scheme, req.URL.Host, req.URL.RequestURI()))
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			// 匿名请求遇到 401 时记录日志
@@ -333,7 +331,7 @@ func forward(c *gin.Context) {
 				newWWWAuth := replaceRealm(wwwAuth, proxyRealURL)
 				resp.Header.Set("Www-Authenticate", newWWWAuth)
 
-				debugLogf("DEBUG modified Www-Authenticate: %s", newWWWAuth)
+				debugLog("modified Www-Authenticate", "value", newWWWAuth)
 			}
 
 			// 写入缓存（同步读取响应体，异步写入文件）
