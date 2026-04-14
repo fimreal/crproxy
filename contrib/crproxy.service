@@ -34,7 +34,7 @@ ProtectSystem=strict
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
-ReadWritePaths=/var/lib/crproxy /etc/crproxy
+ReadWritePaths=/var/lib/crproxy /etc/crproxy /opt/crproxy
 PrivateTmp=true
 
 # Limits
