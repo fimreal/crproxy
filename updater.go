@@ -89,18 +89,8 @@ func checkWritePermission(execPath string) error {
 	f.Close()
 	os.Remove(testFile)
 
-	// 如果可执行文件已存在，检查是否可写
-	if _, err := os.Stat(execPath); err == nil {
-		// 尝试打开文件以写入模式
-		f, err := os.OpenFile(execPath, os.O_WRONLY, 0)
-		if err != nil {
-			if os.IsPermission(err) {
-				return fmt.Errorf("no write permission to executable %s (permission denied)", execPath)
-			}
-			return fmt.Errorf("cannot write to executable %s: %w", execPath, err)
-		}
-		f.Close()
-	}
+	// 注意：在 Linux 上，只要目录可写，就可以通过 rename 替换运行中的二进制文件
+	// 不需要检查二进制文件本身的写权限
 
 	return nil
 }
