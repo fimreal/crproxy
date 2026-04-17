@@ -117,7 +117,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 28px;
             box-shadow: var(--shadow-lg);
         }
 
@@ -223,7 +222,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
         }
 
         .app-header h1 {
@@ -599,7 +597,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
         }
 
         .modal-content h3 {
@@ -1727,28 +1724,10 @@
         }
 
         // Toast 通知
-        // 显示 Toast 通知（兼容旧版本）
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            // 支持多行文本
             toast.innerHTML = message.replace(/\n/g, '<br>');
-            toast.style.cssText = `
-                position: fixed;
-                top: 100px;
-                right: 20px;
-                padding: 14px 28px;
-                background: var(--card);
-                color: var(--foreground);
-                border: 1px solid var(--border);
-                border-radius: 8px;
-                box-shadow: var(--shadow-lg);
-                z-index: 999;
-                animation: slideIn 0.3s ease;
-                font-size: 14px;
-                font-weight: 500;
-                line-height: 1.5;
-            `;
 
             document.body.appendChild(toast);
 
