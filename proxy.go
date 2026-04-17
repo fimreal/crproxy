@@ -222,6 +222,9 @@ func forward(c *gin.Context) {
 			req.URL.Host = defaultURL.Host
 			req.Host = defaultURL.Host
 
+			// 记录上游主机（用于统计）
+			c.Set("upstreamHost", defaultURL.Host)
+
 			// 检查是否为IP地址
 			host := c.Request.Host
 			if hostWithPort, _, err := net.SplitHostPort(c.Request.Host); err == nil {
@@ -241,6 +244,7 @@ func forward(c *gin.Context) {
 						req.URL.Scheme = u.Scheme
 						req.URL.Host = u.Host
 						req.Host = u.Host
+						c.Set("upstreamHost", u.Host)
 					}
 				}
 			}

@@ -38,21 +38,47 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		// 只统计代理请求（/v2/ 和 /token/ 路径）
 		isProxyRequest := strings.HasPrefix(path, "/v2/") || strings.HasPrefix(path, "/token/")
 		status := c.Writer.Status()
+		size := c.Writer.Size()
 
-		// 收集统计数据（只统计成功的代理请求）
-		if statsCollector != nil && isProxyRequest && status >= 200 && status < 400 {
+		// 收集统计数据（所有代理请求，不管状态码）
+		if statsCollector != nil && isProxyRequest {
 			statsCollector.IncrementRequests()
-			switch c.Writer.Header().Get("X-Cache") {
-			case "HIT":
-				statsCollector.IncrementCacheHits()
-			case "MISS":
-				statsCollector.IncrementCacheMisses()
+
+			// 缓存统计（只统计成功的请求）
+			if status >= 200 && status < 400 {
+				switch c.Writer.Header().Get("X-Cache") {
+				case "HIT":
+					statsCollector.IncrementCacheHits()
+				case "MISS":
+					statsCollector.IncrementCacheMisses()
+				}
+			}
+
+			// 客户端类型统计（所有请求）
+			userAgent := c.GetHeader("User-Agent")
+			clientType := parseClientType(userAgent)
+			statsCollector.IncrementClient(clientType)
+
+			// 上游统计（所有请求，从 gin.Context 获取）
+			if upstreamHost, exists := c.Get("upstreamHost"); exists {
+				statsCollector.IncrementUpstream(upstreamHost.(string))
+			}
+
+			// 镜像统计（所有请求）
+			imageName := parseImageName(path)
+			statsCollector.IncrementImage(imageName)
+
+			// 客户端 IP 统计
+			statsCollector.IncrementClientIP(c.ClientIP())
+
+			// 流量统计（成功的请求）
+			if status >= 200 && status < 400 && size > 0 {
+				statsCollector.AddBytesSent(size)
 			}
 		}
 
 		// 记录访问日志
 		latency := time.Since(start)
-		size := c.Writer.Size()
 		requestID, _ := c.Get("requestID")
 		cacheStatus := c.Writer.Header().Get("X-Cache")
 		if cacheStatus == "" {

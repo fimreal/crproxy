@@ -969,7 +969,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                             </svg>
-                            <span data-i18n="requestStats">请求统计</span>
+                            <span data-i18n="serviceStatus">服务状态</span>
                         </h2>
                     </div>
                     <div class="stats-grid" id="request-stats"></div>
@@ -997,6 +997,61 @@
                             <span data-i18n="clearCache">清空缓存</span>
                         </button>
                     </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                            <span data-i18n="clientStats">客户端统计</span>
+                        </h2>
+                    </div>
+                    <div id="client-stats" class="loading" data-i18n="noData">暂无数据</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                            <span data-i18n="upstreamStats">上游统计</span>
+                        </h2>
+                    </div>
+                    <div id="upstream-stats" class="loading" data-i18n="noData">暂无数据</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                            <span data-i18n="imageStats">镜像统计</span>
+                        </h2>
+                    </div>
+                    <div id="image-stats" class="loading" data-i18n="noData">暂无数据</div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            <span data-i18n="clientIPStats">客户端 IP 统计</span>
+                        </h2>
+                    </div>
+                    <div id="client-ip-stats" class="loading" data-i18n="noData">暂无数据</div>
                 </div>
             </div>
 
@@ -1224,7 +1279,20 @@
                     clearCache: '清空缓存',
                     clearCacheConfirm: '确认清空缓存？',
                     requestStats: '请求统计',
+                    serviceStatus: '服务状态',
                     cacheStats: '缓存统计',
+                    clientStats: '客户端统计',
+                    upstreamStats: '上游统计',
+                    imageStats: '镜像统计',
+                    noData: '暂无数据',
+                    clientType: '客户端类型',
+                    upstreamHost: '上游主机',
+                    imageName: '镜像名称',
+                    requestCount: '请求数',
+                    pullCount: '拉取次数',
+                    trafficSent: '发送流量',
+                    clientIPStats: '客户端 IP 统计',
+                    clientIP: '客户端 IP',
                     dangerOperation: '危险操作',
                     clearCacheWarning: '清空缓存将删除所有缓存的镜像层，后续请求将重新从源仓库下载。',
                     requestTotal: '请求总数',
@@ -1251,7 +1319,7 @@
                     updateToLatest: '更新到最新版本',
                     latestVersion: '最新版本',
                     checkUpdateFailed: '检查更新失败',
-                    downloadedRestartNeeded: '已下载，需要重启服务才能生效',
+                    downloadedRestartNeeded: '已下载，请手动重启服务以完成更新',
                     updating: '更新中...',
                     alreadyLatestVersion: '已经是最新版本',
                     updateFailed: '更新失败',
@@ -1360,7 +1428,20 @@
                     clearCache: 'Clear Cache',
                     clearCacheConfirm: 'Confirm clear cache?',
                     requestStats: 'Request Statistics',
+                    serviceStatus: 'Service Status',
                     cacheStats: 'Cache Statistics',
+                    clientStats: 'Client Statistics',
+                    upstreamStats: 'Upstream Statistics',
+                    imageStats: 'Image Statistics',
+                    noData: 'No data',
+                    clientType: 'Client Type',
+                    upstreamHost: 'Upstream Host',
+                    imageName: 'Image Name',
+                    requestCount: 'Requests',
+                    pullCount: 'Pulls',
+                    trafficSent: 'Traffic Sent',
+                    clientIPStats: 'Client IP Statistics',
+                    clientIP: 'Client IP',
                     dangerOperation: 'Dangerous Operation',
                     clearCacheWarning: 'Clearing cache will delete all cached image layers. Future requests will re-download from source.',
                     requestTotal: 'Total Requests',
@@ -1387,7 +1468,7 @@
                     updateToLatest: 'Update to Latest Version',
                     latestVersion: 'Latest Version',
                     checkUpdateFailed: 'Failed to check for updates',
-                    downloadedRestartNeeded: 'downloaded, restart required to apply',
+                    downloadedRestartNeeded: 'downloaded, please restart the service to apply',
                     updating: 'Updating...',
                     alreadyLatestVersion: 'Already on latest version',
                     updateFailed: 'Update failed',
@@ -1756,26 +1837,45 @@
                 if (hours > 0 || days > 0) uptimeStr += `${hours}h `;
                 uptimeStr += `${minutes}m`;
 
-                document.getElementById('request-stats').innerHTML = `
-                    <div class="stat-card">
-                        <div class="stat-value">${totalReqs.toLocaleString()}</div>
-                        <div class="stat-label">${I18n.t('requestTotal')}</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${uptimeStr}</div>
-                        <div class="stat-label">${I18n.t('uptime')}</div>
-                    </div>
-                `;
-
                 // 缓存统计
                 const cacheResponse = await fetch('/admin/api/cache/stats', {
                     headers: {'Authorization': `Bearer ${token}`}
                 });
                 const cacheStats = await cacheResponse.json();
 
+                // 服务状态：运行时间 + 请求总数 + 流量
+                const bytesSent = reqStats.bytesSent || 0;
+                const bytesReceived = reqStats.bytesReceived || 0;
+                const formatBytes = (bytes) => {
+                    if (bytes < 1024) return bytes + ' B';
+                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                    if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+                    return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+                };
+
+                document.getElementById('request-stats').innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${uptimeStr}</div>
+                        <div class="stat-label">${I18n.t('uptime')}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalReqs.toLocaleString()}</div>
+                        <div class="stat-label">${I18n.t('requestTotal')}</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-value">${formatBytes(bytesSent)}</div>
+                        <div class="stat-label">${I18n.t('trafficSent')}</div>
+                    </div>
+                `;
+
+                // 缓存统计：只有启用时才显示详细数据
                 if (cacheStats.enabled) {
                     const sizeInMB = (cacheStats.totalSize / 1024 / 1024).toFixed(2);
                     document.getElementById('cache-stats').innerHTML = `
+                        <div class="stat-card blue">
+                            <div class="stat-value">${hitRate}%</div>
+                            <div class="stat-label">${I18n.t('hitRate')}</div>
+                        </div>
                         <div class="stat-card green">
                             <div class="stat-value">${cacheHits.toLocaleString()}</div>
                             <div class="stat-label">${I18n.t('cacheHits')}</div>
@@ -1783,10 +1883,6 @@
                         <div class="stat-card orange">
                             <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
                             <div class="stat-label">${I18n.t('cacheMisses')}</div>
-                        </div>
-                        <div class="stat-card blue">
-                            <div class="stat-value">${hitRate}%</div>
-                            <div class="stat-label">${I18n.t('hitRate')}</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-value">${(cacheStats.blobCount || 0).toLocaleString()}</div>
@@ -1803,23 +1899,115 @@
                     `;
                 } else {
                     document.getElementById('cache-stats').innerHTML = `
-                        <div class="stat-card green">
-                            <div class="stat-value">${cacheHits.toLocaleString()}</div>
-                            <div class="stat-label">${I18n.t('cacheHits')}</div>
-                        </div>
-                        <div class="stat-card orange">
-                            <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
-                            <div class="stat-label">${I18n.t('cacheMisses')}</div>
-                        </div>
-                        <div class="stat-card blue">
-                            <div class="stat-value">${hitRate}%</div>
-                            <div class="stat-label">${I18n.t('hitRate')}</div>
-                        </div>
                         <div class="stat-card">
                             <div class="stat-value">${I18n.t('notEnabled')}</div>
                             <div class="stat-label">${I18n.t('cacheStatus')}</div>
                         </div>
                     `;
+                }
+
+                // 客户端统计
+                const clients = reqStats.clients || {};
+                if (Object.keys(clients).length > 0) {
+                    const sortedClients = Object.entries(clients).sort((a, b) => b[1] - a[1]);
+                    document.getElementById('client-stats').innerHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>${I18n.t('clientType')}</th>
+                                    <th>${I18n.t('requestCount')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sortedClients.map(([name, count]) => `
+                                    <tr>
+                                        <td><strong>${name}</strong></td>
+                                        <td>${count.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    document.getElementById('client-stats').innerHTML = `<div class="loading">${I18n.t('noData')}</div>`;
+                }
+
+                // 上游统计
+                const upstreams = reqStats.upstreams || {};
+                if (Object.keys(upstreams).length > 0) {
+                    const sortedUpstreams = Object.entries(upstreams).sort((a, b) => b[1] - a[1]);
+                    document.getElementById('upstream-stats').innerHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>${I18n.t('upstreamHost')}</th>
+                                    <th>${I18n.t('requestCount')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sortedUpstreams.map(([host, count]) => `
+                                    <tr>
+                                        <td><strong>${host}</strong></td>
+                                        <td>${count.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    document.getElementById('upstream-stats').innerHTML = `<div class="loading">${I18n.t('noData')}</div>`;
+                }
+
+                // 镜像统计（只显示前 20 个）
+                const images = reqStats.images || {};
+                if (Object.keys(images).length > 0) {
+                    const sortedImages = Object.entries(images).sort((a, b) => b[1] - a[1]).slice(0, 20);
+                    document.getElementById('image-stats').innerHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>${I18n.t('imageName')}</th>
+                                    <th>${I18n.t('pullCount')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sortedImages.map(([name, count]) => `
+                                    <tr>
+                                        <td><code>${name}</code></td>
+                                        <td>${count.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    document.getElementById('image-stats').innerHTML = `<div class="loading">${I18n.t('noData')}</div>`;
+                }
+
+                // 客户端 IP 统计（只显示前 20 个）
+                const clientIPs = reqStats.clientIPs || {};
+                if (Object.keys(clientIPs).length > 0) {
+                    const sortedClientIPs = Object.entries(clientIPs).sort((a, b) => b[1] - a[1]).slice(0, 20);
+                    document.getElementById('client-ip-stats').innerHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>${I18n.t('clientIP')}</th>
+                                    <th>${I18n.t('requestCount')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sortedClientIPs.map(([ip, count]) => `
+                                    <tr>
+                                        <td><code>${ip}</code></td>
+                                        <td>${count.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    document.getElementById('client-ip-stats').innerHTML = `<div class="loading">${I18n.t('noData')}</div>`;
                 }
             } catch (error) {
                 console.error(I18n.t('loadStatsFailed') + ':', error);
@@ -1934,8 +2122,8 @@
 
             updateInfoDiv.innerHTML = `
                 <div class="warning-box" style="margin-top: 0; background: var(--success-light); border-color: var(--success);">
-                    <h3>${I18n.t('updateSuccess')}</h3>
-                    <p>${I18n.t('newVersion')} <strong>${newVersion}</strong> ${I18n.t('downloadedRestartNeeded')}</p>
+                    <h3 style="color: var(--success);">✓ ${I18n.t('updateSuccess')}</h3>
+                    <p style="margin-top: 8px;">${I18n.t('newVersion')} <strong>${newVersion}</strong> ${I18n.t('downloadedRestartNeeded')}</p>
                 </div>
             `;
             updateActionsDiv.style.display = 'none';
