@@ -1216,6 +1216,7 @@
                     totalRequests: '总请求数',
                     cacheHits: '缓存命中',
                     hitRate: '命中率',
+                    uptime: '运行时间',
                     uploadTraffic: '上传流量',
                     downloadTraffic: '下载流量',
                     cacheSize: '缓存大小',
@@ -1351,6 +1352,7 @@
                     totalRequests: 'Total Requests',
                     cacheHits: 'Cache Hits',
                     hitRate: 'Hit Rate',
+                    uptime: 'Uptime',
                     uploadTraffic: 'Upload',
                     downloadTraffic: 'Download',
                     cacheSize: 'Cache Size',
@@ -1744,22 +1746,24 @@
                 const cacheHits = reqStats.cacheHits || 0;
                 const hitRate = totalReqs > 0 ? ((cacheHits / totalReqs) * 100).toFixed(1) : 0;
 
+                // 格式化 uptime
+                const uptimeSeconds = reqStats.uptime || 0;
+                const days = Math.floor(uptimeSeconds / 86400);
+                const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+                const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+                let uptimeStr = '';
+                if (days > 0) uptimeStr += `${days}d `;
+                if (hours > 0 || days > 0) uptimeStr += `${hours}h `;
+                uptimeStr += `${minutes}m`;
+
                 document.getElementById('request-stats').innerHTML = `
                     <div class="stat-card">
                         <div class="stat-value">${totalReqs.toLocaleString()}</div>
                         <div class="stat-label">${I18n.t('requestTotal')}</div>
                     </div>
-                    <div class="stat-card green">
-                        <div class="stat-value">${cacheHits.toLocaleString()}</div>
-                        <div class="stat-label">${I18n.t('cacheHits')}</div>
-                    </div>
-                    <div class="stat-card orange">
-                        <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
-                        <div class="stat-label">${I18n.t('cacheMisses')}</div>
-                    </div>
-                    <div class="stat-card blue">
-                        <div class="stat-value">${hitRate}%</div>
-                        <div class="stat-label">${I18n.t('hitRate')}</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uptimeStr}</div>
+                        <div class="stat-label">${I18n.t('uptime')}</div>
                     </div>
                 `;
 
@@ -1772,21 +1776,45 @@
                 if (cacheStats.enabled) {
                     const sizeInMB = (cacheStats.totalSize / 1024 / 1024).toFixed(2);
                     document.getElementById('cache-stats').innerHTML = `
+                        <div class="stat-card green">
+                            <div class="stat-value">${cacheHits.toLocaleString()}</div>
+                            <div class="stat-label">${I18n.t('cacheHits')}</div>
+                        </div>
+                        <div class="stat-card orange">
+                            <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
+                            <div class="stat-label">${I18n.t('cacheMisses')}</div>
+                        </div>
+                        <div class="stat-card blue">
+                            <div class="stat-value">${hitRate}%</div>
+                            <div class="stat-label">${I18n.t('hitRate')}</div>
+                        </div>
                         <div class="stat-card">
                             <div class="stat-value">${(cacheStats.blobCount || 0).toLocaleString()}</div>
                             <div class="stat-label">${I18n.t('cachedLayers')}</div>
                         </div>
-                        <div class="stat-card green">
+                        <div class="stat-card">
                             <div class="stat-value">${sizeInMB}</div>
                             <div class="stat-label">${I18n.t('totalSizeMB')}</div>
                         </div>
-                        <div class="stat-card blue">
+                        <div class="stat-card">
                             <div class="stat-value">${(cacheStats.totalFiles || 0).toLocaleString()}</div>
                             <div class="stat-label">${I18n.t('totalFiles')}</div>
                         </div>
                     `;
                 } else {
                     document.getElementById('cache-stats').innerHTML = `
+                        <div class="stat-card green">
+                            <div class="stat-value">${cacheHits.toLocaleString()}</div>
+                            <div class="stat-label">${I18n.t('cacheHits')}</div>
+                        </div>
+                        <div class="stat-card orange">
+                            <div class="stat-value">${(reqStats.cacheMisses || 0).toLocaleString()}</div>
+                            <div class="stat-label">${I18n.t('cacheMisses')}</div>
+                        </div>
+                        <div class="stat-card blue">
+                            <div class="stat-value">${hitRate}%</div>
+                            <div class="stat-label">${I18n.t('hitRate')}</div>
+                        </div>
                         <div class="stat-card">
                             <div class="stat-value">${I18n.t('notEnabled')}</div>
                             <div class="stat-label">${I18n.t('cacheStatus')}</div>

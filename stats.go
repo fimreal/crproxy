@@ -3,18 +3,24 @@
 
 package main
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // StatsCollector 统计收集器
 type StatsCollector struct {
 	totalRequests int64
 	cacheHits     int64
 	cacheMisses   int64
+	startTime     time.Time
 }
 
 // NewStatsCollector 创建统计收集器
 func NewStatsCollector() *StatsCollector {
-	return &StatsCollector{}
+	return &StatsCollector{
+		startTime: time.Now(),
+	}
 }
 
 // IncrementRequests 增加请求计数
@@ -33,10 +39,12 @@ func (sc *StatsCollector) IncrementCacheMisses() {
 }
 
 // GetStats 获取统计数据
-func (sc *StatsCollector) GetStats() map[string]int64 {
-	return map[string]int64{
+func (sc *StatsCollector) GetStats() map[string]interface{} {
+	uptime := time.Since(sc.startTime)
+	return map[string]interface{}{
 		"totalRequests": atomic.LoadInt64(&sc.totalRequests),
 		"cacheHits":     atomic.LoadInt64(&sc.cacheHits),
 		"cacheMisses":   atomic.LoadInt64(&sc.cacheMisses),
+		"uptime":        uptime.Seconds(),
 	}
 }
