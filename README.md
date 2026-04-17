@@ -235,6 +235,7 @@ docker pull docker.mydomain.com/library/nginx:latest
 | Argument | Default | Description |
 |----------|----------|-------------|
 | `-config-file` | `./crproxy-config.json` | Configuration file path for runtime configuration |
+| `-stats-dir` | (empty) | Directory for persisting statistics to JSON file. Statistics are saved every 5 minutes and on shutdown |
 | `-update` | - | Update to latest version from GitHub releases |
 
 **Note:** Lite version only supports command-line arguments. Configuration file and self-update features are not available in the lite version.
@@ -250,6 +251,20 @@ docker pull docker.mydomain.com/library/nginx:latest
 ## Admin Interface (Full Version Only)
 
 crproxy provides a web-based admin interface for viewing and editing configuration.
+
+### Features
+
+- **Configuration Management**: View and edit registry mappings and service settings
+- **Statistics Dashboard**: Real-time monitoring with:
+  - Service status (uptime, request count, traffic)
+  - Cache statistics (hit rate, hits/misses, storage usage)
+  - Client statistics (by type: Docker, Podman, containerd, etc.)
+  - Upstream statistics (requests per registry)
+  - Image statistics (most pulled images)
+  - Client IP statistics (top requesting IPs)
+- **System Update**: Check and apply updates from GitHub releases
+- **Dark/Light Mode**: Theme toggle with auto system preference detection
+- **i18n**: English and Chinese language support
 
 ### Enable Admin Interface
 
@@ -305,6 +320,41 @@ docker run -it --rm -p 5000:5000 \
 - `GET /token/*` - Proxy authentication token requests (both versions)
 - `GET /admin` - Admin interface (requires password authentication, full version only)
 - `GET /containerd` - Containerd configuration help page (full version only)
+
+## Statistics Persistence (Full Version Only)
+
+When `-stats-dir` is specified, crproxy will persist statistics to a JSON file, allowing statistics to survive service restarts.
+
+```bash
+# Enable statistics persistence
+crproxy -stats-dir=/var/lib/crproxy/stats
+
+# Or with Docker
+docker run -it --rm -p 5000:5000 \
+  -v /path/to/stats:/stats \
+  crproxy:latest -stats-dir=/stats
+```
+
+**Features:**
+- Statistics loaded from file on startup
+- Auto-saved every 5 minutes
+- Saved on graceful shutdown (SIGINT/SIGTERM)
+- Captures: request counts, cache stats, client types, upstreams, images, client IPs, traffic
+
+**Generated file (`stats.json`):**
+```json
+{
+  "totalRequests": 1234,
+  "cacheHits": 456,
+  "cacheMisses": 78,
+  "clients": {"docker": 800, "podman": 300, "containerd": 134},
+  "upstreams": {"registry-1.docker.io": 900, "quay.io": 334},
+  "images": {"library/alpine": 200, "library/nginx": 150},
+  "clientIPs": {"192.168.1.100": 500, "10.0.0.1": 300},
+  "bytesSent": 1073741824,
+  "savedAt": "2024-01-15T10:30:45Z"
+}
+```
 
 ## Cache Feature
 
