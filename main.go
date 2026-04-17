@@ -10,6 +10,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +28,9 @@ var DomainSuffix string
 // CacheDir is the local cache directory for caching responses
 var CacheDir string
 
+// StatsDir is the directory for persisting statistics
+var StatsDir string
+
 func main() {
 	var help bool
 	var showVersion bool
@@ -39,6 +45,7 @@ func main() {
 	flag.StringVar(&DomainSuffix, "domain-suffix", "", "domain suffix for mirror hosts, e.g. mydomain.com; if empty use default registry as upstream")
 	flag.StringVar(&registryMapSource, "registry-map", "", "registry map file path or URL (default: embed registrymap.json)")
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
+	flag.StringVar(&StatsDir, "stats-dir", "", "directory for persisting statistics to JSON file (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry to use when no domain suffix is configured or when accessing via IP address")
 	flag.BoolVar(&showVersion, "version", false, "show version")
@@ -94,6 +101,7 @@ func main() {
 		DomainSuffix:    DomainSuffix,
 		LogLevel:        logLevelStr,
 		CacheDir:        CacheDir,
+		StatsDir:        StatsDir,
 		Listen:          listen,
 	}
 
@@ -123,6 +131,9 @@ func main() {
 		if CacheDir != "" {
 			loadedConfig.CacheDir = CacheDir
 		}
+		if StatsDir != "" {
+			loadedConfig.StatsDir = StatsDir
+		}
 		if listen != ":5000" {
 			loadedConfig.Listen = listen
 		}
@@ -134,6 +145,7 @@ func main() {
 	SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
 	DomainSuffix = config.DomainSuffix
 	CacheDir = config.CacheDir
+	StatsDir = config.StatsDir
 	setLogLevel(config.LogLevel)
 
 	debugLog("registry-map available registries", "registries", GetRegistryMap())
@@ -166,6 +178,16 @@ func main() {
 
 	// 初始化统计收集器
 	statsCollector := NewStatsCollector()
+
+	// 加载持久化的统计数据
+	if StatsDir != "" {
+		statsCollector.SetStatsDir(StatsDir)
+		if err := statsCollector.LoadFromFile(); err != nil {
+			slog.Warn("failed to load stats from file", "error", err)
+		} else {
+			slog.Info("stats persistence enabled", "stats_dir", StatsDir)
+		}
+	}
 
 	if !Debug {
 		gin.SetMode(gin.ReleaseMode)
@@ -202,6 +224,32 @@ func main() {
 	r.GET("/admin/", func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", adminHTML)
 	})
+
+	// 优雅关闭：保存统计数据
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		if StatsDir != "" {
+			slog.Info("saving stats before shutdown...")
+			if err := statsCollector.SaveToFile(); err != nil {
+				slog.Error("failed to save stats", "error", err)
+			}
+		}
+		os.Exit(0)
+	}()
+
+	// 定时保存统计数据（每 5 分钟）
+	if StatsDir != "" {
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			for range ticker.C {
+				if err := statsCollector.SaveToFile(); err != nil {
+					slog.Warn("failed to save stats periodically", "error", err)
+				}
+			}
+		}()
+	}
 
 	slog.Info("crproxy listening", "address", listen)
 	if DomainSuffix != "" {

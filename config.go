@@ -58,6 +58,7 @@ type Config struct {
 	DomainSuffix    string            `json:"domainSuffix"`
 	LogLevel        string            `json:"logLevel"`
 	CacheDir        string            `json:"cacheDir"`
+	StatsDir        string            `json:"statsDir"`
 	Listen          string            `json:"listen"`
 	AdminPassword   string            `json:"adminPassword"`
 }

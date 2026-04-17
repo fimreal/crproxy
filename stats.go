@@ -4,6 +4,10 @@
 package main
 
 import (
+	"encoding/json"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,13 +26,161 @@ type StatsCollector struct {
 	clientIPs     sync.Map // map[string]int64 - client IP -> count
 	bytesSent     int64    // 上传流量（发送给客户端）
 	bytesReceived int64    // 下载流量（从上游接收）
+	statsDir      string   // 统计持久化目录
 }
+
+// statsFileName 统计文件名
+const statsFileName = "stats.json"
 
 // NewStatsCollector 创建统计收集器
 func NewStatsCollector() *StatsCollector {
 	return &StatsCollector{
 		startTime: time.Now(),
 	}
+}
+
+// SetStatsDir 设置统计持久化目录
+func (sc *StatsCollector) SetStatsDir(dir string) {
+	sc.statsDir = dir
+}
+
+// LoadFromFile 从文件加载统计数据
+func (sc *StatsCollector) LoadFromFile() error {
+	if sc.statsDir == "" {
+		return nil
+	}
+
+	filePath := filepath.Join(sc.statsDir, statsFileName)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 文件不存在不是错误
+		}
+		return err
+	}
+
+	var saved struct {
+		TotalRequests int64             `json:"totalRequests"`
+		CacheHits     int64             `json:"cacheHits"`
+		CacheMisses   int64             `json:"cacheMisses"`
+		Clients       map[string]int64  `json:"clients"`
+		Upstreams     map[string]int64  `json:"upstreams"`
+		Images        map[string]int64  `json:"images"`
+		ClientIPs     map[string]int64  `json:"clientIPs"`
+		BytesSent     int64             `json:"bytesSent"`
+		BytesReceived int64             `json:"bytesReceived"`
+	}
+
+	if err := json.Unmarshal(data, &saved); err != nil {
+		return err
+	}
+
+	// 恢复统计数据
+	atomic.StoreInt64(&sc.totalRequests, saved.TotalRequests)
+	atomic.StoreInt64(&sc.cacheHits, saved.CacheHits)
+	atomic.StoreInt64(&sc.cacheMisses, saved.CacheMisses)
+	atomic.StoreInt64(&sc.bytesSent, saved.BytesSent)
+	atomic.StoreInt64(&sc.bytesReceived, saved.BytesReceived)
+
+	// 恢复 map 数据
+	for k, v := range saved.Clients {
+		ptr := new(int64)
+		*ptr = v
+		sc.clients.Store(k, ptr)
+	}
+	for k, v := range saved.Upstreams {
+		ptr := new(int64)
+		*ptr = v
+		sc.upstreams.Store(k, ptr)
+	}
+	for k, v := range saved.Images {
+		ptr := new(int64)
+		*ptr = v
+		sc.images.Store(k, ptr)
+	}
+	for k, v := range saved.ClientIPs {
+		ptr := new(int64)
+		*ptr = v
+		sc.clientIPs.Store(k, ptr)
+	}
+
+	slog.Info("loaded stats from file", "path", filePath)
+	return nil
+}
+
+// SaveToFile 保存统计数据到文件
+func (sc *StatsCollector) SaveToFile() error {
+	if sc.statsDir == "" {
+		return nil
+	}
+
+	// 确保目录存在
+	if err := os.MkdirAll(sc.statsDir, 0755); err != nil {
+		return err
+	}
+
+	// 收集统计数据
+	clients := make(map[string]int64)
+	sc.clients.Range(func(key, value interface{}) bool {
+		clients[key.(string)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+
+	upstreams := make(map[string]int64)
+	sc.upstreams.Range(func(key, value interface{}) bool {
+		upstreams[key.(string)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+
+	images := make(map[string]int64)
+	sc.images.Range(func(key, value interface{}) bool {
+		images[key.(string)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+
+	clientIPs := make(map[string]int64)
+	sc.clientIPs.Range(func(key, value interface{}) bool {
+		clientIPs[key.(string)] = atomic.LoadInt64(value.(*int64))
+		return true
+	})
+
+	saved := struct {
+		TotalRequests int64            `json:"totalRequests"`
+		CacheHits     int64            `json:"cacheHits"`
+		CacheMisses   int64            `json:"cacheMisses"`
+		Clients       map[string]int64 `json:"clients"`
+		Upstreams     map[string]int64 `json:"upstreams"`
+		Images        map[string]int64 `json:"images"`
+		ClientIPs     map[string]int64 `json:"clientIPs"`
+		BytesSent     int64            `json:"bytesSent"`
+		BytesReceived int64            `json:"bytesReceived"`
+		SavedAt       string           `json:"savedAt"`
+	}{
+		TotalRequests: atomic.LoadInt64(&sc.totalRequests),
+		CacheHits:     atomic.LoadInt64(&sc.cacheHits),
+		CacheMisses:   atomic.LoadInt64(&sc.cacheMisses),
+		Clients:       clients,
+		Upstreams:     upstreams,
+		Images:        images,
+		ClientIPs:     clientIPs,
+		BytesSent:     atomic.LoadInt64(&sc.bytesSent),
+		BytesReceived: atomic.LoadInt64(&sc.bytesReceived),
+		SavedAt:       time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.MarshalIndent(saved, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// 原子写入
+	filePath := filepath.Join(sc.statsDir, statsFileName)
+	tmpFile := filePath + ".tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpFile, filePath)
 }
 
 // parseClientType 从 User-Agent 解析客户端类型
