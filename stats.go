@@ -16,16 +16,19 @@ import (
 
 // StatsCollector 统计收集器
 type StatsCollector struct {
-	totalRequests int64
-	cacheHits     int64
-	cacheMisses   int64
-	startTime     time.Time
-	clients       sync.Map // map[string]int64 - client type -> count
-	upstreams     sync.Map // map[string]int64 - upstream host -> count
-	images        sync.Map // map[string]int64 - image name -> count
-	clientIPs     sync.Map // map[string]int64 - client IP -> count
-	bytesSent     int64    // 发送给客户端的流量
-	statsDir      string   // 统计持久化目录
+	totalRequests    int64
+	cacheHits        int64
+	cacheMisses      int64
+	startTime        time.Time
+	clients          sync.Map // map[string]int64 - client type -> count
+	upstreams        sync.Map // map[string]int64 - upstream host -> count
+	images           sync.Map // map[string]int64 - image name -> count
+	clientIPs        sync.Map // map[string]int64 - client IP -> count
+	bytesSent        int64    // 发送给客户端的流量
+	activeConns      int64    // 当前活跃连接数
+	bytesRateWindow  int64    // 当前时间窗口内传输的字节数
+	rateWindowStart  int64    // 当前时间窗口开始时间（unix nano）
+	statsDir         string   // 统计持久化目录
 }
 
 // statsFileName 统计文件名
@@ -332,6 +335,69 @@ func (sc *StatsCollector) AddBytesSent(bytes int) {
 	atomic.AddInt64(&sc.bytesSent, int64(bytes))
 }
 
+// IncrementActiveConns 增加活跃连接数
+func (sc *StatsCollector) IncrementActiveConns() {
+	atomic.AddInt64(&sc.activeConns, 1)
+}
+
+// DecrementActiveConns 减少活跃连接数
+func (sc *StatsCollector) DecrementActiveConns() {
+	atomic.AddInt64(&sc.activeConns, -1)
+}
+
+const rateWindowNano = int64(time.Second) // 1秒时间窗口
+
+// AddBytesWithRate 增加发送字节数并更新速率统计
+func (sc *StatsCollector) AddBytesWithRate(bytes int) {
+	atomic.AddInt64(&sc.bytesSent, int64(bytes))
+
+	now := time.Now().UnixNano()
+	windowStart := atomic.LoadInt64(&sc.rateWindowStart)
+
+	// 如果是新的窗口或窗口已过期，重置窗口
+	if windowStart == 0 || now-windowStart > rateWindowNano {
+		// 尝试原子更新窗口开始时间
+		if atomic.CompareAndSwapInt64(&sc.rateWindowStart, windowStart, now) {
+			// 成功更新窗口，重置字节数
+			atomic.StoreInt64(&sc.bytesRateWindow, int64(bytes))
+			return
+		}
+		// 如果 CAS 失败，说明其他 goroutine 已经更新了窗口，继续累加
+	}
+
+	// 累加字节数
+	atomic.AddInt64(&sc.bytesRateWindow, int64(bytes))
+}
+
+// GetActiveConns 获取当前活跃连接数
+func (sc *StatsCollector) GetActiveConns() int64 {
+	return atomic.LoadInt64(&sc.activeConns)
+}
+
+// GetBytesRate 获取当前传输速率（字节/秒）
+func (sc *StatsCollector) GetBytesRate() int64 {
+	now := time.Now().UnixNano()
+	windowStart := atomic.LoadInt64(&sc.rateWindowStart)
+
+	if windowStart == 0 {
+		return 0
+	}
+
+	elapsed := now - windowStart
+	if elapsed <= 0 {
+		return 0
+	}
+
+	// 如果窗口超过1秒，返回0（表示没有最近的传输活动）
+	if elapsed > rateWindowNano {
+		return 0
+	}
+
+	bytesInWindow := atomic.LoadInt64(&sc.bytesRateWindow)
+	// 计算速率：字节/秒
+	return bytesInWindow * int64(time.Second) / elapsed
+}
+
 // GetStats 获取统计数据
 func (sc *StatsCollector) GetStats() map[string]any {
 	uptime := time.Since(sc.startTime)
@@ -374,5 +440,7 @@ func (sc *StatsCollector) GetStats() map[string]any {
 		"images":        images,
 		"clientIPs":     clientIPs,
 		"bytesSent":     atomic.LoadInt64(&sc.bytesSent),
+		"activeConns":   atomic.LoadInt64(&sc.activeConns),
+		"bytesRate":     sc.GetBytesRate(),
 	}
 }

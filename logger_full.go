@@ -18,9 +18,6 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
 
-		// 处理请求
-		c.Next()
-
 		// 排除不需要统计和记录日志的路径
 		excludePaths := []string{"/healthz", "/admin", "/help", "/favicon.ico"}
 		shouldSkip := false
@@ -31,12 +28,22 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 			}
 		}
 
+		// 只统计代理请求（/v2/ 和 /token/ 路径）
+		isProxyRequest := strings.HasPrefix(path, "/v2/") || strings.HasPrefix(path, "/token/")
+
+		// 增加活跃连接数（只统计代理请求）
+		if statsCollector != nil && isProxyRequest && !shouldSkip {
+			statsCollector.IncrementActiveConns()
+			defer statsCollector.DecrementActiveConns()
+		}
+
+		// 处理请求
+		c.Next()
+
 		if shouldSkip {
 			return
 		}
 
-		// 只统计代理请求（/v2/ 和 /token/ 路径）
-		isProxyRequest := strings.HasPrefix(path, "/v2/") || strings.HasPrefix(path, "/token/")
 		status := c.Writer.Status()
 		size := c.Writer.Size()
 
@@ -73,7 +80,7 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 
 			// 流量统计（成功的请求）
 			if status >= 200 && status < 400 && size > 0 {
-				statsCollector.AddBytesSent(size)
+				statsCollector.AddBytesWithRate(size)
 			}
 		}
 
