@@ -1291,6 +1291,8 @@
                     requestCount: '请求数',
                     pullCount: '拉取次数',
                     trafficSent: '发送流量',
+                    activeConns: '活跃连接',
+                    transferRate: '传输速率',
                     clientIPStats: '客户端 IP 统计',
                     clientIP: '客户端 IP',
                     dangerOperation: '危险操作',
@@ -1440,6 +1442,8 @@
                     requestCount: 'Requests',
                     pullCount: 'Pulls',
                     trafficSent: 'Traffic Sent',
+                    activeConns: 'Active Conns',
+                    transferRate: 'Transfer Rate',
                     clientIPStats: 'Client IP Statistics',
                     clientIP: 'Client IP',
                     dangerOperation: 'Dangerous Operation',
@@ -1843,14 +1847,21 @@
                 });
                 const cacheStats = await cacheResponse.json();
 
-                // 服务状态：运行时间 + 请求总数 + 流量
+                // 服务状态：运行时间 + 请求总数 + 活跃连接 + 速率 + 流量
                 const bytesSent = reqStats.bytesSent || 0;
-                const bytesReceived = reqStats.bytesReceived || 0;
+                const bytesRate = reqStats.bytesRate || 0;
+                const activeConns = reqStats.activeConns || 0;
                 const formatBytes = (bytes) => {
                     if (bytes < 1024) return bytes + ' B';
                     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
                     if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
                     return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+                };
+                const formatRate = (bytesPerSec) => {
+                    if (bytesPerSec < 1024) return bytesPerSec + ' B/s';
+                    if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+                    if (bytesPerSec < 1024 * 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + ' MB/s';
+                    return (bytesPerSec / 1024 / 1024 / 1024).toFixed(2) + ' GB/s';
                 };
 
                 document.getElementById('request-stats').innerHTML = `
@@ -1862,7 +1873,15 @@
                         <div class="stat-value">${totalReqs.toLocaleString()}</div>
                         <div class="stat-label">${I18n.t('requestTotal')}</div>
                     </div>
+                    <div class="stat-card blue">
+                        <div class="stat-value">${activeConns}</div>
+                        <div class="stat-label">${I18n.t('activeConns')}</div>
+                    </div>
                     <div class="stat-card green">
+                        <div class="stat-value">${formatRate(bytesRate)}</div>
+                        <div class="stat-label">${I18n.t('transferRate')}</div>
+                    </div>
+                    <div class="stat-card">
                         <div class="stat-value">${formatBytes(bytesSent)}</div>
                         <div class="stat-label">${I18n.t('trafficSent')}</div>
                     </div>
