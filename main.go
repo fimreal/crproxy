@@ -37,6 +37,7 @@ func main() {
 	var doUpdate bool
 	var listen string
 	var registryMapSource string
+	var defaultRegistry string
 	var logLevelStr string
 	var configFile string
 
@@ -46,6 +47,7 @@ func main() {
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
 	flag.StringVar(&StatsDir, "stats-dir", "", "directory for persisting statistics to JSON file (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
+	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry URL, e.g. https://registry-1.docker.io")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.StringVar(&configFile, "config-file", "", "configuration file path (default: ./crproxy-config.json)")
@@ -113,9 +115,16 @@ func main() {
 			os.Exit(1)
 		}
 		initialConfig.RegistryMap = registryMap
+		// 命令行指定的 defaultRegistry 优先
+		if defaultRegistry != "" {
+			initialConfig.RegistryMap["default"] = defaultRegistry
+		}
 		configManager.UpdateConfig(initialConfig)
 	} else {
 		// 配置文件存在，使用配置文件的值，但命令行参数优先
+		if defaultRegistry != "" {
+			loadedConfig.RegistryMap["default"] = defaultRegistry
+		}
 		if DomainSuffix != "" {
 			loadedConfig.DomainSuffix = DomainSuffix
 		}

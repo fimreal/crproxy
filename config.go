@@ -213,5 +213,19 @@ func loadRegistryMap(source string) (map[string]string, error) {
 		}
 	}
 
+	// 如果只有 default 没有 named registry，添加一个 "-" 占位
+	if registryMap["default"] != "" {
+		hasNamedRegistry := false
+		for k := range registryMap {
+			if k != "default" {
+				hasNamedRegistry = true
+				break
+			}
+		}
+		if !hasNamedRegistry {
+			registryMap["-"] = registryMap["default"]
+		}
+	}
+
 	return registryMap, nil
 }

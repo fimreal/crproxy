@@ -1682,12 +1682,15 @@
                 const tbody = document.getElementById('registry-tbody');
                 tbody.innerHTML = '';
                 for (const [name, url] of Object.entries(config.registryMap || {})) {
+                    if (name === 'default') continue; // 跳过 default
+                    const displayName = name === '-' ? '(未命名)' : name;
+                    const canDelete = name !== '-';
                     tbody.innerHTML += `
                         <tr>
-                            <td><strong>${name}</strong></td>
+                            <td><strong>${displayName}</strong></td>
                             <td>${url}</td>
                             <td>
-                                ${name !== 'default' ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')">${I18n.t('delete')}</button>` : ''}
+                                ${canDelete ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')">${I18n.t('delete')}</button>` : ''}
                             </td>
                         </tr>
                     `;
@@ -1706,13 +1709,17 @@
                 // 填充默认 Registry 下拉框
                 const defaultRegistrySelect = document.getElementById('default-registry');
                 const currentDefault = config.registryMap?.['default'] || '';
+                const otherRegistries = Object.entries(config.registryMap || {}).filter(([name]) => name !== 'default');
+
                 defaultRegistrySelect.innerHTML = '<option value="">-- 选择默认 Registry --</option>';
-                for (const [name, url] of Object.entries(config.registryMap || {})) {
-                    if (name !== 'default') {
-                        const selected = url === currentDefault ? 'selected' : '';
-                        defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${name} (${url})</option>`;
-                    }
+                defaultRegistrySelect.disabled = false;
+
+                for (const [name, url] of otherRegistries) {
+                    const selected = url === currentDefault ? 'selected' : '';
+                    const displayName = name === '-' ? '(未命名)' : name;
+                    defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName}</option>`;
                 }
+
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
                 document.getElementById('log-level').value = config.logLevel || 'info';
                 document.getElementById('cache-dir').value = config.cacheDir || I18n.t('cacheNotEnabled');
