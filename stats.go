@@ -24,8 +24,7 @@ type StatsCollector struct {
 	upstreams     sync.Map // map[string]int64 - upstream host -> count
 	images        sync.Map // map[string]int64 - image name -> count
 	clientIPs     sync.Map // map[string]int64 - client IP -> count
-	bytesSent     int64    // 上传流量（发送给客户端）
-	bytesReceived int64    // 下载流量（从上游接收）
+	bytesSent     int64    // 发送给客户端的流量
 	statsDir      string   // 统计持久化目录
 }
 
@@ -68,7 +67,6 @@ func (sc *StatsCollector) LoadFromFile() error {
 		Images        map[string]int64  `json:"images"`
 		ClientIPs     map[string]int64  `json:"clientIPs"`
 		BytesSent     int64             `json:"bytesSent"`
-		BytesReceived int64             `json:"bytesReceived"`
 	}
 
 	if err := json.Unmarshal(data, &saved); err != nil {
@@ -80,7 +78,6 @@ func (sc *StatsCollector) LoadFromFile() error {
 	atomic.StoreInt64(&sc.cacheHits, saved.CacheHits)
 	atomic.StoreInt64(&sc.cacheMisses, saved.CacheMisses)
 	atomic.StoreInt64(&sc.bytesSent, saved.BytesSent)
-	atomic.StoreInt64(&sc.bytesReceived, saved.BytesReceived)
 
 	// 恢复 map 数据
 	for k, v := range saved.Clients {
@@ -121,25 +118,25 @@ func (sc *StatsCollector) SaveToFile() error {
 
 	// 收集统计数据
 	clients := make(map[string]int64)
-	sc.clients.Range(func(key, value interface{}) bool {
+	sc.clients.Range(func(key, value any) bool {
 		clients[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	upstreams := make(map[string]int64)
-	sc.upstreams.Range(func(key, value interface{}) bool {
+	sc.upstreams.Range(func(key, value any) bool {
 		upstreams[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	images := make(map[string]int64)
-	sc.images.Range(func(key, value interface{}) bool {
+	sc.images.Range(func(key, value any) bool {
 		images[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	clientIPs := make(map[string]int64)
-	sc.clientIPs.Range(func(key, value interface{}) bool {
+	sc.clientIPs.Range(func(key, value any) bool {
 		clientIPs[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
@@ -153,7 +150,6 @@ func (sc *StatsCollector) SaveToFile() error {
 		Images        map[string]int64 `json:"images"`
 		ClientIPs     map[string]int64 `json:"clientIPs"`
 		BytesSent     int64            `json:"bytesSent"`
-		BytesReceived int64            `json:"bytesReceived"`
 		SavedAt       string           `json:"savedAt"`
 	}{
 		TotalRequests: atomic.LoadInt64(&sc.totalRequests),
@@ -164,7 +160,6 @@ func (sc *StatsCollector) SaveToFile() error {
 		Images:        images,
 		ClientIPs:     clientIPs,
 		BytesSent:     atomic.LoadInt64(&sc.bytesSent),
-		BytesReceived: atomic.LoadInt64(&sc.bytesReceived),
 		SavedAt:       time.Now().Format(time.RFC3339),
 	}
 
@@ -337,44 +332,39 @@ func (sc *StatsCollector) AddBytesSent(bytes int) {
 	atomic.AddInt64(&sc.bytesSent, int64(bytes))
 }
 
-// AddBytesReceived 增加接收字节数
-func (sc *StatsCollector) AddBytesReceived(bytes int) {
-	atomic.AddInt64(&sc.bytesReceived, int64(bytes))
-}
-
 // GetStats 获取统计数据
-func (sc *StatsCollector) GetStats() map[string]interface{} {
+func (sc *StatsCollector) GetStats() map[string]any {
 	uptime := time.Since(sc.startTime)
 
 	// 收集客户端统计
 	clients := make(map[string]int64)
-	sc.clients.Range(func(key, value interface{}) bool {
+	sc.clients.Range(func(key, value any) bool {
 		clients[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	// 收集上游统计
 	upstreams := make(map[string]int64)
-	sc.upstreams.Range(func(key, value interface{}) bool {
+	sc.upstreams.Range(func(key, value any) bool {
 		upstreams[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	// 收集镜像统计
 	images := make(map[string]int64)
-	sc.images.Range(func(key, value interface{}) bool {
+	sc.images.Range(func(key, value any) bool {
 		images[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
 	// 收集客户端 IP 统计
 	clientIPs := make(map[string]int64)
-	sc.clientIPs.Range(func(key, value interface{}) bool {
+	sc.clientIPs.Range(func(key, value any) bool {
 		clientIPs[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
-	return map[string]interface{}{
+	return map[string]any{
 		"totalRequests": atomic.LoadInt64(&sc.totalRequests),
 		"cacheHits":     atomic.LoadInt64(&sc.cacheHits),
 		"cacheMisses":   atomic.LoadInt64(&sc.cacheMisses),
@@ -384,6 +374,5 @@ func (sc *StatsCollector) GetStats() map[string]interface{} {
 		"images":        images,
 		"clientIPs":     clientIPs,
 		"bytesSent":     atomic.LoadInt64(&sc.bytesSent),
-		"bytesReceived": atomic.LoadInt64(&sc.bytesReceived),
 	}
 }
