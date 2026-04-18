@@ -95,7 +95,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			}
 
 			// 应用配置（实时生效）
-			SetRegistryMap(effectiveRegistryMap(newConfig.RegistryMap, newConfig.DefaultRegistry))
+			SetRegistryMap(newConfig.RegistryMap)
 			DomainSuffix = newConfig.DomainSuffix
 			setLogLevel(newConfig.LogLevel)
 
@@ -138,7 +138,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			}
 
 			// 应用配置
-			SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
+			SetRegistryMap(config.RegistryMap)
 
 			slog.Info("registry added", "name", req.Name, "url", req.URL)
 			c.JSON(http.StatusOK, gin.H{"message": "Registry added successfully"})
@@ -166,7 +166,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			}
 
 			// 应用配置
-			SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
+			SetRegistryMap(config.RegistryMap)
 
 			slog.Info("registry deleted", "name", name)
 			c.JSON(http.StatusOK, gin.H{"message": "Registry deleted successfully"})
@@ -313,7 +313,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 
 			// 应用配置
 			config := configManager.GetConfig()
-			SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
+			SetRegistryMap(config.RegistryMap)
 			DomainSuffix = config.DomainSuffix
 			setLogLevel(config.LogLevel)
 

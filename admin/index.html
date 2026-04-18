@@ -926,7 +926,9 @@
                         <div class="form-grid">
                             <div class="form-group">
                                 <label data-i18n="defaultRegistry">默认 Registry</label>
-                                <input type="text" id="default-registry" placeholder="https://registry-1.docker.io">
+                                <select id="default-registry">
+                                    <option value="">-- 选择默认 Registry --</option>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label data-i18n="domainSuffix">域名后缀</label>
@@ -1701,7 +1703,16 @@
                 `;
 
                 // 填充服务参数表单
-                document.getElementById('default-registry').value = config.defaultRegistry || '';
+                // 填充默认 Registry 下拉框
+                const defaultRegistrySelect = document.getElementById('default-registry');
+                const currentDefault = config.registryMap?.['default'] || '';
+                defaultRegistrySelect.innerHTML = '<option value="">-- 选择默认 Registry --</option>';
+                for (const [name, url] of Object.entries(config.registryMap || {})) {
+                    if (name !== 'default') {
+                        const selected = url === currentDefault ? 'selected' : '';
+                        defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${name} (${url})</option>`;
+                    }
+                }
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
                 document.getElementById('log-level').value = config.logLevel || 'info';
                 document.getElementById('cache-dir').value = config.cacheDir || I18n.t('cacheNotEnabled');
@@ -1725,8 +1736,12 @@
 
                 const currentConfig = await currentResponse.json();
 
-                // 只更新修改的字段（缓存目录不可修改）
-                currentConfig.defaultRegistry = document.getElementById('default-registry').value;
+                // 更新修改的字段
+                const selectedRegistry = document.getElementById('default-registry').value;
+                if (selectedRegistry && currentConfig.registryMap) {
+                    // 将选中的 registry URL 设置为 default
+                    currentConfig.registryMap['default'] = currentConfig.registryMap[selectedRegistry];
+                }
                 currentConfig.domainSuffix = document.getElementById('domain-suffix').value;
                 currentConfig.logLevel = document.getElementById('log-level').value;
 

@@ -37,30 +37,15 @@ func SetRegistryMap(m map[string]string) {
 	registryMap.Store(m)
 }
 
-// effectiveRegistryMap returns an immutable map to be stored as the active registry map.
-// It applies DefaultRegistry override by writing to the "default" key.
-// It always returns a fresh map to avoid accidental mutation by callers.
-func effectiveRegistryMap(m map[string]string, defaultRegistry string) map[string]string {
-	out := make(map[string]string, len(m)+1)
-	for k, v := range m {
-		out[k] = v
-	}
-	if defaultRegistry != "" {
-		out["default"] = defaultRegistry
-	}
-	return out
-}
-
 // Config 动态配置结构
 type Config struct {
-	RegistryMap     map[string]string `json:"registryMap"`
-	DefaultRegistry string            `json:"defaultRegistry"`
-	DomainSuffix    string            `json:"domainSuffix"`
-	LogLevel        string            `json:"logLevel"`
-	CacheDir        string            `json:"cacheDir"`
-	StatsDir        string            `json:"statsDir"`
-	Listen          string            `json:"listen"`
-	AdminPassword   string            `json:"adminPassword"`
+	RegistryMap   map[string]string `json:"registryMap"`
+	DomainSuffix  string            `json:"domainSuffix"`
+	LogLevel      string            `json:"logLevel"`
+	CacheDir      string            `json:"cacheDir"`
+	StatsDir      string            `json:"statsDir"`
+	Listen        string            `json:"listen"`
+	AdminPassword string            `json:"adminPassword"`
 }
 
 // ConfigManager 配置管理器（线程安全）
@@ -96,20 +81,6 @@ func (cm *ConfigManager) GetConfig() Config {
 func (cm *ConfigManager) UpdateConfig(newConfig Config) error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-
-	// 验证配置
-	if newConfig.DefaultRegistry != "" {
-		u, err := url.Parse(newConfig.DefaultRegistry)
-		if err != nil {
-			return fmt.Errorf("invalid default-registry URL: %w", err)
-		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return fmt.Errorf("invalid default-registry scheme: %s", u.Scheme)
-		}
-		if u.Host == "" {
-			return fmt.Errorf("invalid default-registry host: empty")
-		}
-	}
 
 	// 验证 RegistryMap 中的 URL
 	for name, registryURL := range newConfig.RegistryMap {

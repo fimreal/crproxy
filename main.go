@@ -37,7 +37,6 @@ func main() {
 	var doUpdate bool
 	var listen string
 	var registryMapSource string
-	var defaultRegistry string
 	var logLevelStr string
 	var configFile string
 
@@ -47,7 +46,6 @@ func main() {
 	flag.StringVar(&CacheDir, "cache-dir", "", "local cache directory for caching responses (optional, disabled if empty)")
 	flag.StringVar(&StatsDir, "stats-dir", "", "directory for persisting statistics to JSON file (optional, disabled if empty)")
 	flag.BoolVar(&help, "help", false, "show help")
-	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry to use when no domain suffix is configured or when accessing via IP address")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.StringVar(&configFile, "config-file", "", "configuration file path (default: ./crproxy-config.json)")
@@ -96,13 +94,12 @@ func main() {
 
 	// 使用命令行参数创建初始配置
 	initialConfig := Config{
-		RegistryMap:     make(map[string]string),
-		DefaultRegistry: defaultRegistry,
-		DomainSuffix:    DomainSuffix,
-		LogLevel:        logLevelStr,
-		CacheDir:        CacheDir,
-		StatsDir:        StatsDir,
-		Listen:          listen,
+		RegistryMap:  make(map[string]string),
+		DomainSuffix: DomainSuffix,
+		LogLevel:     logLevelStr,
+		CacheDir:     CacheDir,
+		StatsDir:     StatsDir,
+		Listen:       listen,
 	}
 
 	// 如果配置文件为空，使用命令行参数初始化
@@ -119,9 +116,6 @@ func main() {
 		configManager.UpdateConfig(initialConfig)
 	} else {
 		// 配置文件存在，使用配置文件的值，但命令行参数优先
-		if defaultRegistry != "" {
-			loadedConfig.DefaultRegistry = defaultRegistry
-		}
 		if DomainSuffix != "" {
 			loadedConfig.DomainSuffix = DomainSuffix
 		}
@@ -142,7 +136,7 @@ func main() {
 
 	// 应用配置
 	config := configManager.GetConfig()
-	SetRegistryMap(effectiveRegistryMap(config.RegistryMap, config.DefaultRegistry))
+	SetRegistryMap(config.RegistryMap)
 	DomainSuffix = config.DomainSuffix
 	CacheDir = config.CacheDir
 	StatsDir = config.StatsDir
