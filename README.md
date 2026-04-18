@@ -240,6 +240,39 @@ docker pull docker.mydomain.com/library/nginx:latest
 
 **Note:** Lite version only supports command-line arguments. Configuration file and self-update features are not available in the lite version.
 
+### Configuration File (Full Version Only)
+
+The configuration file (`crproxy-config.json` by default) allows runtime configuration:
+
+```json
+{
+  "registryMap": {
+    "default": "https://registry-1.docker.io",
+    "docker": "https://registry-1.docker.io",
+    "ghcr": "https://ghcr.io",
+    "k8s": "https://registry.k8s.io"
+  },
+  "domainSuffix": "mydomain.com",
+  "logLevel": "info",
+  "cacheDir": "./cache",
+  "statsDir": "./stats",
+  "listen": ":5000",
+  "adminPassword": "your-secure-password"
+}
+```
+
+**Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `registryMap` | Registry name to URL mapping. `default` is used when no domain suffix matches |
+| `domainSuffix` | Domain suffix for mirror hosts (e.g., `mydomain.com`) |
+| `logLevel` | Log level: `debug`, `info`, `warn`, `error` |
+| `cacheDir` | Local cache directory for blobs (optional, empty to disable) |
+| `statsDir` | Directory for statistics persistence (optional, empty to disable) |
+| `listen` | Listen address (can be overridden by `-listen` flag) |
+| `adminPassword` | Password for admin interface (can also be set via `ADMIN_PASSWORD` env) |
+
 ### Environment Variables
 
 | Variable | Description | Version |

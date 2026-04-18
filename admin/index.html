@@ -1682,12 +1682,13 @@
                 const tbody = document.getElementById('registry-tbody');
                 tbody.innerHTML = '';
                 for (const [name, url] of Object.entries(config.registryMap || {})) {
-                    if (name === 'default') continue; // 跳过 default
-                    const displayName = name === '-' ? '(未命名)' : name;
-                    const canDelete = name !== '-';
+                    const isDefault = name === 'default';
+                    const displayName = isDefault ? 'default' : (name === '-' ? '(未命名)' : name);
+                    const canDelete = name !== '-' && name !== 'default';
+                    const badge = isDefault ? '<span class="badge" style="background: var(--primary-muted); color: var(--primary-dark);">当前默认</span>' : '';
                     tbody.innerHTML += `
                         <tr>
-                            <td><strong>${displayName}</strong></td>
+                            <td><strong>${displayName}</strong>${badge}</td>
                             <td>${url}</td>
                             <td>
                                 ${canDelete ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')">${I18n.t('delete')}</button>` : ''}
@@ -1708,16 +1709,44 @@
                 // 填充服务参数表单
                 // 填充默认 Registry 下拉框
                 const defaultRegistrySelect = document.getElementById('default-registry');
-                const currentDefault = config.registryMap?.['default'] || '';
+                const defaultRegistryUrl = config.registryMap?.['default'] || '';
+
+                defaultRegistrySelect.innerHTML = '';
+
+                // 找出所有非 default 的 registry
                 const otherRegistries = Object.entries(config.registryMap || {}).filter(([name]) => name !== 'default');
 
-                defaultRegistrySelect.innerHTML = '<option value="">-- 选择默认 Registry --</option>';
-                defaultRegistrySelect.disabled = false;
+                // 检查 default 是否在列表中存在
+                const matchingRegistry = otherRegistries.find(([_, url]) => url === defaultRegistryUrl);
 
-                for (const [name, url] of otherRegistries) {
-                    const selected = url === currentDefault ? 'selected' : '';
-                    const displayName = name === '-' ? '(未命名)' : name;
-                    defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName} (${url})</option>`;
+                if (matchingRegistry) {
+                    // 如果存在，直接选中它
+                    for (const [name, url] of otherRegistries) {
+                        const displayName = name === '-' ? '(未命名)' : name;
+                        const selected = url === defaultRegistryUrl ? 'selected' : '';
+                        defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName} (${url})</option>`;
+                    }
+                } else if (defaultRegistryUrl) {
+                    // 如果不存在但有值，显示 default 作为第一项
+                    defaultRegistrySelect.innerHTML += `<option value="" selected>default (${defaultRegistryUrl})</option>`;
+                    for (const [name, url] of otherRegistries) {
+                        const displayName = name === '-' ? '(未命名)' : name;
+                        defaultRegistrySelect.innerHTML += `<option value="${name}">${displayName} (${url})</option>`;
+                    }
+                } else {
+                    // 没有配置 default
+                    for (const [name, url] of otherRegistries) {
+                        const displayName = name === '-' ? '(未命名)' : name;
+                        defaultRegistrySelect.innerHTML += `<option value="${name}">${displayName} (${url})</option>`;
+                    }
+                }
+
+                // 如果没有 registry，显示占位
+                if (otherRegistries.length === 0 && !defaultRegistryUrl) {
+                    defaultRegistrySelect.innerHTML = '<option value="">-- 无可用 Registry --</option>';
+                    defaultRegistrySelect.disabled = true;
+                } else {
+                    defaultRegistrySelect.disabled = false;
                 }
 
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
@@ -1745,9 +1774,28 @@
 
                 // 更新修改的字段
                 const selectedRegistry = document.getElementById('default-registry').value;
-                if (selectedRegistry && currentConfig.registryMap) {
-                    // 将选中的 registry URL 设置为 default
-                    currentConfig.registryMap['default'] = currentConfig.registryMap[selectedRegistry];
+                if (selectedRegistry && currentConfig.registryMap && currentConfig.registryMap[selectedRegistry]) {
+                    const oldDefaultUrl = currentConfig.registryMap['default'];
+                    const newDefaultUrl = currentConfig.registryMap[selectedRegistry];
+
+                    // 只有实际切换时才处理
+                    if (oldDefaultUrl !== newDefaultUrl) {
+                        // 如果 oldDefaultUrl 存在，检查是否需要保留为 '-'
+                        if (oldDefaultUrl) {
+                            // 检查 oldDefaultUrl 是否在其他 registry 中存在
+                            const otherRegistries = Object.entries(currentConfig.registryMap)
+                                .filter(([name]) => name !== 'default');
+                            const urlExistsElsewhere = otherRegistries.some(([_, url]) => url === oldDefaultUrl);
+
+                            // 如果不存在，保留为 '-'
+                            if (!urlExistsElsewhere) {
+                                currentConfig.registryMap['-'] = oldDefaultUrl;
+                            }
+                        }
+
+                        // 更新 default
+                        currentConfig.registryMap['default'] = newDefaultUrl;
+                    }
                 }
                 currentConfig.domainSuffix = document.getElementById('domain-suffix').value;
                 currentConfig.logLevel = document.getElementById('log-level').value;
