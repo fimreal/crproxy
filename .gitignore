@@ -41,6 +41,9 @@ bin/
 crproxy-config.json
 crproxy-config.json.tmp
 
+# Stats data (generated at runtime)
+stats-data/
+
 # Binary file (built at compile time)
 crproxy
 
