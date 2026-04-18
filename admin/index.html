@@ -1717,7 +1717,7 @@
                 for (const [name, url] of otherRegistries) {
                     const selected = url === currentDefault ? 'selected' : '';
                     const displayName = name === '-' ? '(未命名)' : name;
-                    defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName}</option>`;
+                    defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName} (${url})</option>`;
                 }
 
                 document.getElementById('domain-suffix').value = config.domainSuffix || '';
