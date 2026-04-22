@@ -14,21 +14,29 @@ import (
 	"time"
 )
 
+// ClientStats 客户端统计（请求数 + 流量）
+type ClientStats struct {
+	Requests int64 `json:"requests"`
+	Bytes    int64 `json:"bytes"`
+}
+
 // StatsCollector 统计收集器
 type StatsCollector struct {
-	totalRequests    int64
-	cacheHits        int64
-	cacheMisses      int64
-	startTime        time.Time
-	clients          sync.Map // map[string]int64 - client type -> count
-	upstreams        sync.Map // map[string]int64 - upstream host -> count
-	images           sync.Map // map[string]int64 - image name -> count
-	clientIPs        sync.Map // map[string]int64 - client IP -> count
-	bytesSent        int64    // 发送给客户端的流量
-	activeConns      int64    // 当前活跃连接数
-	bytesRateWindow  int64    // 当前时间窗口内传输的字节数
-	rateWindowStart  int64    // 当前时间窗口开始时间（unix nano）
-	statsDir         string   // 统计持久化目录
+	totalRequests   int64
+	cacheHits       int64
+	cacheMisses     int64
+	startTime       time.Time
+	clients         sync.Map // map[string]*ClientStats - client type -> stats
+	upstreams       sync.Map // map[string]int64 - upstream host -> count
+	images          sync.Map // map[string]int64 - image name -> count
+	clientIPs       sync.Map // map[string]*ClientStats - client IP -> stats
+	bytesSent       int64    // 发送给客户端的流量
+	bytesReceived   int64    // 从上游仓库接收的流量
+	activeConns     int64    // 当前活跃连接数
+	bytesRateWindow int64    // 当前时间窗口内传输的字节数
+	rateWindowStart int64    // 当前时间窗口开始时间（unix nano）
+	rateMutex       sync.Mutex
+	statsDir        string
 }
 
 // statsFileName 统计文件名
@@ -56,52 +64,92 @@ func (sc *StatsCollector) LoadFromFile() error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil // 文件不存在不是错误
+			return nil
 		}
 		return err
 	}
 
-	var saved struct {
-		TotalRequests int64             `json:"totalRequests"`
-		CacheHits     int64             `json:"cacheHits"`
-		CacheMisses   int64             `json:"cacheMisses"`
-		Clients       map[string]int64  `json:"clients"`
-		Upstreams     map[string]int64  `json:"upstreams"`
-		Images        map[string]int64  `json:"images"`
-		ClientIPs     map[string]int64  `json:"clientIPs"`
-		BytesSent     int64             `json:"bytesSent"`
-	}
-
-	if err := json.Unmarshal(data, &saved); err != nil {
+	// 支持新旧两种格式
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	// 恢复统计数据
-	atomic.StoreInt64(&sc.totalRequests, saved.TotalRequests)
-	atomic.StoreInt64(&sc.cacheHits, saved.CacheHits)
-	atomic.StoreInt64(&sc.cacheMisses, saved.CacheMisses)
-	atomic.StoreInt64(&sc.bytesSent, saved.BytesSent)
+	// 恢复基本计数器
+	if v, ok := raw["totalRequests"].(float64); ok {
+		atomic.StoreInt64(&sc.totalRequests, int64(v))
+	}
+	if v, ok := raw["cacheHits"].(float64); ok {
+		atomic.StoreInt64(&sc.cacheHits, int64(v))
+	}
+	if v, ok := raw["cacheMisses"].(float64); ok {
+		atomic.StoreInt64(&sc.cacheMisses, int64(v))
+	}
+	if v, ok := raw["bytesSent"].(float64); ok {
+		atomic.StoreInt64(&sc.bytesSent, int64(v))
+	}
+	if v, ok := raw["bytesReceived"].(float64); ok {
+		atomic.StoreInt64(&sc.bytesReceived, int64(v))
+	}
 
-	// 恢复 map 数据
-	for k, v := range saved.Clients {
-		ptr := new(int64)
-		*ptr = v
-		sc.clients.Store(k, ptr)
+	// 恢复 clients（支持新旧格式）
+	if clients, ok := raw["clients"].(map[string]any); ok {
+		for k, v := range clients {
+			s := new(ClientStats)
+			switch val := v.(type) {
+			case float64: // 旧格式：只有计数
+				s.Requests = int64(val)
+			case map[string]any: // 新格式：{requests, bytes}
+				if r, ok := val["requests"].(float64); ok {
+					s.Requests = int64(r)
+				}
+				if b, ok := val["bytes"].(float64); ok {
+					s.Bytes = int64(b)
+				}
+			}
+			sc.clients.Store(k, s)
+		}
 	}
-	for k, v := range saved.Upstreams {
-		ptr := new(int64)
-		*ptr = v
-		sc.upstreams.Store(k, ptr)
+
+	// 恢复 upstreams
+	if upstreams, ok := raw["upstreams"].(map[string]any); ok {
+		for k, v := range upstreams {
+			if val, ok := v.(float64); ok {
+				ptr := new(int64)
+				*ptr = int64(val)
+				sc.upstreams.Store(k, ptr)
+			}
+		}
 	}
-	for k, v := range saved.Images {
-		ptr := new(int64)
-		*ptr = v
-		sc.images.Store(k, ptr)
+
+	// 恢复 images
+	if images, ok := raw["images"].(map[string]any); ok {
+		for k, v := range images {
+			if val, ok := v.(float64); ok {
+				ptr := new(int64)
+				*ptr = int64(val)
+				sc.images.Store(k, ptr)
+			}
+		}
 	}
-	for k, v := range saved.ClientIPs {
-		ptr := new(int64)
-		*ptr = v
-		sc.clientIPs.Store(k, ptr)
+
+	// 恢复 clientIPs（支持新旧格式）
+	if clientIPs, ok := raw["clientIPs"].(map[string]any); ok {
+		for k, v := range clientIPs {
+			s := new(ClientStats)
+			switch val := v.(type) {
+			case float64:
+				s.Requests = int64(val)
+			case map[string]any:
+				if r, ok := val["requests"].(float64); ok {
+					s.Requests = int64(r)
+				}
+				if b, ok := val["bytes"].(float64); ok {
+					s.Bytes = int64(b)
+				}
+			}
+			sc.clientIPs.Store(k, s)
+		}
 	}
 
 	slog.Info("loaded stats from file", "path", filePath)
@@ -114,46 +162,57 @@ func (sc *StatsCollector) SaveToFile() error {
 		return nil
 	}
 
-	// 确保目录存在
 	if err := os.MkdirAll(sc.statsDir, 0755); err != nil {
 		return err
 	}
 
-	// 收集统计数据
-	clients := make(map[string]int64)
+	// 收集 clients
+	clients := make(map[string]ClientStats)
 	sc.clients.Range(func(key, value any) bool {
-		clients[key.(string)] = atomic.LoadInt64(value.(*int64))
+		s := value.(*ClientStats)
+		clients[key.(string)] = ClientStats{
+			Requests: atomic.LoadInt64(&s.Requests),
+			Bytes:    atomic.LoadInt64(&s.Bytes),
+		}
 		return true
 	})
 
+	// 收集 upstreams
 	upstreams := make(map[string]int64)
 	sc.upstreams.Range(func(key, value any) bool {
 		upstreams[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
+	// 收集 images
 	images := make(map[string]int64)
 	sc.images.Range(func(key, value any) bool {
 		images[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
-	clientIPs := make(map[string]int64)
+	// 收集 clientIPs
+	clientIPs := make(map[string]ClientStats)
 	sc.clientIPs.Range(func(key, value any) bool {
-		clientIPs[key.(string)] = atomic.LoadInt64(value.(*int64))
+		s := value.(*ClientStats)
+		clientIPs[key.(string)] = ClientStats{
+			Requests: atomic.LoadInt64(&s.Requests),
+			Bytes:    atomic.LoadInt64(&s.Bytes),
+		}
 		return true
 	})
 
 	saved := struct {
-		TotalRequests int64            `json:"totalRequests"`
-		CacheHits     int64            `json:"cacheHits"`
-		CacheMisses   int64            `json:"cacheMisses"`
-		Clients       map[string]int64 `json:"clients"`
-		Upstreams     map[string]int64 `json:"upstreams"`
-		Images        map[string]int64 `json:"images"`
-		ClientIPs     map[string]int64 `json:"clientIPs"`
-		BytesSent     int64            `json:"bytesSent"`
-		SavedAt       string           `json:"savedAt"`
+		TotalRequests int64                `json:"totalRequests"`
+		CacheHits     int64                `json:"cacheHits"`
+		CacheMisses   int64                `json:"cacheMisses"`
+		Clients       map[string]ClientStats `json:"clients"`
+		Upstreams     map[string]int64     `json:"upstreams"`
+		Images        map[string]int64     `json:"images"`
+		ClientIPs     map[string]ClientStats `json:"clientIPs"`
+		BytesSent     int64                `json:"bytesSent"`
+		BytesReceived int64                `json:"bytesReceived"`
+		SavedAt       string               `json:"savedAt"`
 	}{
 		TotalRequests: atomic.LoadInt64(&sc.totalRequests),
 		CacheHits:     atomic.LoadInt64(&sc.cacheHits),
@@ -163,6 +222,7 @@ func (sc *StatsCollector) SaveToFile() error {
 		Images:        images,
 		ClientIPs:     clientIPs,
 		BytesSent:     atomic.LoadInt64(&sc.bytesSent),
+		BytesReceived: atomic.LoadInt64(&sc.bytesReceived),
 		SavedAt:       time.Now().Format(time.RFC3339),
 	}
 
@@ -171,7 +231,6 @@ func (sc *StatsCollector) SaveToFile() error {
 		return err
 	}
 
-	// 原子写入
 	filePath := filepath.Join(sc.statsDir, statsFileName)
 	tmpFile := filePath + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
@@ -188,55 +247,42 @@ func parseClientType(userAgent string) string {
 	}
 	ua := strings.ToLower(userAgent)
 
-	// Docker: docker/24.0.0, docker/1.41 (windows)
 	if strings.Contains(ua, "docker") {
 		return "docker"
 	}
-	// Podman: libpod/4.0.0, podman/4.0.0
 	if strings.Contains(ua, "podman") || strings.Contains(ua, "libpod") {
 		return "podman"
 	}
-	// containerd: containerd/1.6.0
 	if strings.Contains(ua, "containerd") {
 		return "containerd"
 	}
-	// crane: crane (gcrane)
 	if strings.Contains(ua, "crane") {
 		return "crane"
 	}
-	// skopeo: skopeo/1.9.0
 	if strings.Contains(ua, "skopeo") {
 		return "skopeo"
 	}
-	// buildah: buildah/1.27.0
 	if strings.Contains(ua, "buildah") {
 		return "buildah"
 	}
-	// nerdctl: nerdctl/0.22.0
 	if strings.Contains(ua, "nerdctl") {
 		return "nerdctl"
 	}
-	// Go http client: Go-http-client/1.1
 	if strings.Contains(ua, "go-http-client") {
 		return "go-http-client"
 	}
-	// Python requests: python-requests/2.28.0
 	if strings.Contains(ua, "python-requests") {
 		return "python-requests"
 	}
-	// curl: curl/7.81.0
 	if strings.Contains(ua, "curl") {
 		return "curl"
 	}
-	// wget: wget/1.21
 	if strings.Contains(ua, "wget") {
 		return "wget"
 	}
-	// Harbor replication: harbor-scanner, harbor-registry
 	if strings.Contains(ua, "harbor") {
 		return "harbor"
 	}
-	// AWS ECR: aws-sdk-go
 	if strings.Contains(ua, "aws-sdk") {
 		return "aws-sdk"
 	}
@@ -245,22 +291,17 @@ func parseClientType(userAgent string) string {
 }
 
 // parseImageName 从请求路径解析镜像名称
-// 例如: /v2/library/alpine/manifests/latest -> library/alpine
-// 例如: /v2/ghcr.io/nginx/manifests/v1 -> ghcr.io/nginx (if domain-suffix mode)
 func parseImageName(path string) string {
-	// 路径格式: /v2/<name>/manifests/<ref> 或 /v2/<name>/blobs/<digest>
 	if !strings.HasPrefix(path, "/v2/") {
 		return ""
 	}
 
 	path = strings.TrimPrefix(path, "/v2/")
 
-	// 查找 /manifests/ 或 /blobs/ 或 /tags/ 或 /blobs/uploads/
 	delimiters := []string{"/manifests/", "/blobs/", "/tags/", "/blobs/uploads/"}
 	for _, delim := range delimiters {
 		if idx := strings.Index(path, delim); idx > 0 {
 			imageName := path[:idx]
-			// 限制长度，避免统计太长的名字
 			if len(imageName) > 100 {
 				imageName = imageName[:100]
 			}
@@ -268,7 +309,6 @@ func parseImageName(path string) string {
 		}
 	}
 
-	// 如果没有找到分隔符，可能是 catalog 或其他 API
 	return ""
 }
 
@@ -287,7 +327,7 @@ func (sc *StatsCollector) IncrementCacheMisses() {
 	atomic.AddInt64(&sc.cacheMisses, 1)
 }
 
-// incrementMapCounter 通用的 map 计数器
+// incrementMapCounter 通用的 map 计数器（用于 upstreams 和 images）
 func (sc *StatsCollector) incrementMapCounter(m *sync.Map, key string) {
 	for {
 		val, loaded := m.LoadOrStore(key, new(int64))
@@ -304,9 +344,28 @@ func (sc *StatsCollector) incrementMapCounter(m *sync.Map, key string) {
 	}
 }
 
-// IncrementClient 增加客户端类型计数
+// IncrementClient 增加客户端类型统计（请求+流量）
 func (sc *StatsCollector) IncrementClient(clientType string) {
-	sc.incrementMapCounter(&sc.clients, clientType)
+	for {
+		val, loaded := sc.clients.LoadOrStore(clientType, &ClientStats{})
+		s := val.(*ClientStats)
+		if loaded {
+			old := atomic.LoadInt64(&s.Requests)
+			if atomic.CompareAndSwapInt64(&s.Requests, old, old+1) {
+				return
+			}
+		} else {
+			atomic.AddInt64(&s.Requests, 1)
+			return
+		}
+	}
+}
+
+// AddClientBytes 增加客户端类型的流量统计
+func (sc *StatsCollector) AddClientBytes(clientType string, bytes int) {
+	val, _ := sc.clients.LoadOrStore(clientType, &ClientStats{})
+	s := val.(*ClientStats)
+	atomic.AddInt64(&s.Bytes, int64(bytes))
 }
 
 // IncrementUpstream 增加上游主机计数
@@ -322,17 +381,39 @@ func (sc *StatsCollector) IncrementImage(imageName string) {
 	sc.incrementMapCounter(&sc.images, imageName)
 }
 
-// IncrementClientIP 增加客户端 IP 计数
+// IncrementClientIP 增加客户端 IP 统计（请求+流量）
 func (sc *StatsCollector) IncrementClientIP(ip string) {
 	if ip == "" {
 		return
 	}
-	sc.incrementMapCounter(&sc.clientIPs, ip)
+	for {
+		val, loaded := sc.clientIPs.LoadOrStore(ip, &ClientStats{})
+		s := val.(*ClientStats)
+		if loaded {
+			old := atomic.LoadInt64(&s.Requests)
+			if atomic.CompareAndSwapInt64(&s.Requests, old, old+1) {
+				return
+			}
+		} else {
+			atomic.AddInt64(&s.Requests, 1)
+			return
+		}
+	}
 }
 
-// AddBytesSent 增加发送字节数
-func (sc *StatsCollector) AddBytesSent(bytes int) {
-	atomic.AddInt64(&sc.bytesSent, int64(bytes))
+// AddClientIPBytes 增加客户端 IP 的流量统计
+func (sc *StatsCollector) AddClientIPBytes(ip string, bytes int) {
+	if ip == "" {
+		return
+	}
+	val, _ := sc.clientIPs.LoadOrStore(ip, &ClientStats{})
+	s := val.(*ClientStats)
+	atomic.AddInt64(&s.Bytes, int64(bytes))
+}
+
+// AddBytesReceived 增加接收字节数（从上游下载的流量）
+func (sc *StatsCollector) AddBytesReceived(bytes int) {
+	atomic.AddInt64(&sc.bytesReceived, int64(bytes))
 }
 
 // IncrementActiveConns 增加活跃连接数
@@ -345,28 +426,26 @@ func (sc *StatsCollector) DecrementActiveConns() {
 	atomic.AddInt64(&sc.activeConns, -1)
 }
 
-const rateWindowNano = int64(time.Second) // 1秒时间窗口
+const rateWindowNano = int64(time.Second)
 
 // AddBytesWithRate 增加发送字节数并更新速率统计
 func (sc *StatsCollector) AddBytesWithRate(bytes int) {
 	atomic.AddInt64(&sc.bytesSent, int64(bytes))
 
 	now := time.Now().UnixNano()
-	windowStart := atomic.LoadInt64(&sc.rateWindowStart)
 
-	// 如果是新的窗口或窗口已过期，重置窗口
+	sc.rateMutex.Lock()
+	windowStart := sc.rateWindowStart
+
 	if windowStart == 0 || now-windowStart > rateWindowNano {
-		// 尝试原子更新窗口开始时间
-		if atomic.CompareAndSwapInt64(&sc.rateWindowStart, windowStart, now) {
-			// 成功更新窗口，重置字节数
-			atomic.StoreInt64(&sc.bytesRateWindow, int64(bytes))
-			return
-		}
-		// 如果 CAS 失败，说明其他 goroutine 已经更新了窗口，继续累加
+		sc.rateWindowStart = now
+		sc.bytesRateWindow = int64(bytes)
+		sc.rateMutex.Unlock()
+		return
 	}
 
-	// 累加字节数
-	atomic.AddInt64(&sc.bytesRateWindow, int64(bytes))
+	sc.bytesRateWindow += int64(bytes)
+	sc.rateMutex.Unlock()
 }
 
 // GetActiveConns 获取当前活跃连接数
@@ -377,24 +456,21 @@ func (sc *StatsCollector) GetActiveConns() int64 {
 // GetBytesRate 获取当前传输速率（字节/秒）
 func (sc *StatsCollector) GetBytesRate() int64 {
 	now := time.Now().UnixNano()
-	windowStart := atomic.LoadInt64(&sc.rateWindowStart)
+
+	sc.rateMutex.Lock()
+	windowStart := sc.rateWindowStart
+	bytesInWindow := sc.bytesRateWindow
+	sc.rateMutex.Unlock()
 
 	if windowStart == 0 {
 		return 0
 	}
 
 	elapsed := now - windowStart
-	if elapsed <= 0 {
+	if elapsed <= 0 || elapsed > rateWindowNano {
 		return 0
 	}
 
-	// 如果窗口超过1秒，返回0（表示没有最近的传输活动）
-	if elapsed > rateWindowNano {
-		return 0
-	}
-
-	bytesInWindow := atomic.LoadInt64(&sc.bytesRateWindow)
-	// 计算速率：字节/秒
 	return bytesInWindow * int64(time.Second) / elapsed
 }
 
@@ -402,31 +478,39 @@ func (sc *StatsCollector) GetBytesRate() int64 {
 func (sc *StatsCollector) GetStats() map[string]any {
 	uptime := time.Since(sc.startTime)
 
-	// 收集客户端统计
-	clients := make(map[string]int64)
+	// 收集 clients
+	clients := make(map[string]ClientStats)
 	sc.clients.Range(func(key, value any) bool {
-		clients[key.(string)] = atomic.LoadInt64(value.(*int64))
+		s := value.(*ClientStats)
+		clients[key.(string)] = ClientStats{
+			Requests: atomic.LoadInt64(&s.Requests),
+			Bytes:    atomic.LoadInt64(&s.Bytes),
+		}
 		return true
 	})
 
-	// 收集上游统计
+	// 收集 upstreams
 	upstreams := make(map[string]int64)
 	sc.upstreams.Range(func(key, value any) bool {
 		upstreams[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
-	// 收集镜像统计
+	// 收集 images
 	images := make(map[string]int64)
 	sc.images.Range(func(key, value any) bool {
 		images[key.(string)] = atomic.LoadInt64(value.(*int64))
 		return true
 	})
 
-	// 收集客户端 IP 统计
-	clientIPs := make(map[string]int64)
+	// 收集 clientIPs
+	clientIPs := make(map[string]ClientStats)
 	sc.clientIPs.Range(func(key, value any) bool {
-		clientIPs[key.(string)] = atomic.LoadInt64(value.(*int64))
+		s := value.(*ClientStats)
+		clientIPs[key.(string)] = ClientStats{
+			Requests: atomic.LoadInt64(&s.Requests),
+			Bytes:    atomic.LoadInt64(&s.Bytes),
+		}
 		return true
 	})
 
@@ -440,6 +524,7 @@ func (sc *StatsCollector) GetStats() map[string]any {
 		"images":        images,
 		"clientIPs":     clientIPs,
 		"bytesSent":     atomic.LoadInt64(&sc.bytesSent),
+		"bytesReceived": atomic.LoadInt64(&sc.bytesReceived),
 		"activeConns":   atomic.LoadInt64(&sc.activeConns),
 		"bytesRate":     sc.GetBytesRate(),
 	}

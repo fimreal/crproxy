@@ -1291,8 +1291,10 @@
                     upstreamHost: '上游主机',
                     imageName: '镜像名称',
                     requestCount: '请求数',
+                    traffic: '流量',
                     pullCount: '拉取次数',
                     trafficSent: '发送流量',
+                    downloadTraffic: '下载流量',
                     activeConns: '活跃连接',
                     transferRate: '传输速率',
                     clientIPStats: '客户端 IP 统计',
@@ -1444,6 +1446,7 @@
                     requestCount: 'Requests',
                     pullCount: 'Pulls',
                     trafficSent: 'Traffic Sent',
+                    downloadTraffic: 'Download Traffic',
                     activeConns: 'Active Conns',
                     transferRate: 'Transfer Rate',
                     clientIPStats: 'Client IP Statistics',
@@ -1899,7 +1902,9 @@
                 const reqStats = await reqResponse.json();
                 const totalReqs = reqStats.totalRequests || 0;
                 const cacheHits = reqStats.cacheHits || 0;
-                const hitRate = totalReqs > 0 ? ((cacheHits / totalReqs) * 100).toFixed(1) : 0;
+                const cacheMisses = reqStats.cacheMisses || 0;
+                const cacheTotal = cacheHits + cacheMisses;
+                const hitRate = cacheTotal > 0 ? ((cacheHits / cacheTotal) * 100).toFixed(1) : 0;
 
                 // 格式化 uptime
                 const uptimeSeconds = reqStats.uptime || 0;
@@ -1919,6 +1924,7 @@
 
                 // 服务状态：运行时间 + 请求总数 + 活跃连接 + 速率 + 流量
                 const bytesSent = reqStats.bytesSent || 0;
+                const bytesReceived = reqStats.bytesReceived || 0;
                 const bytesRate = reqStats.bytesRate || 0;
                 const activeConns = reqStats.activeConns || 0;
                 const formatBytes = (bytes) => {
@@ -1954,6 +1960,10 @@
                     <div class="stat-card">
                         <div class="stat-value">${formatBytes(bytesSent)}</div>
                         <div class="stat-label">${I18n.t('trafficSent')}</div>
+                    </div>
+                    <div class="stat-card orange">
+                        <div class="stat-value">${formatBytes(bytesReceived)}</div>
+                        <div class="stat-label">${I18n.t('downloadTraffic')}</div>
                     </div>
                 `;
 
@@ -1998,20 +2008,22 @@
                 // 客户端统计
                 const clients = reqStats.clients || {};
                 if (Object.keys(clients).length > 0) {
-                    const sortedClients = Object.entries(clients).sort((a, b) => b[1] - a[1]);
+                    const sortedClients = Object.entries(clients).sort((a, b) => (b[1].bytes || 0) - (a[1].bytes || 0));
                     document.getElementById('client-stats').innerHTML = `
                         <table>
                             <thead>
                                 <tr>
                                     <th>${I18n.t('clientType')}</th>
                                     <th>${I18n.t('requestCount')}</th>
+                                    <th>${I18n.t('traffic')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${sortedClients.map(([name, count]) => `
+                                ${sortedClients.map(([name, stats]) => `
                                     <tr>
                                         <td><strong>${name}</strong></td>
-                                        <td>${count.toLocaleString()}</td>
+                                        <td>${(stats.requests || 0).toLocaleString()}</td>
+                                        <td>${formatBytes(stats.bytes || 0)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -2073,23 +2085,25 @@
                     document.getElementById('image-stats').innerHTML = `<div class="loading">${I18n.t('noData')}</div>`;
                 }
 
-                // 客户端 IP 统计（只显示前 20 个）
+                // 客户端 IP 统计（只显示前 20 个，按流量排序）
                 const clientIPs = reqStats.clientIPs || {};
                 if (Object.keys(clientIPs).length > 0) {
-                    const sortedClientIPs = Object.entries(clientIPs).sort((a, b) => b[1] - a[1]).slice(0, 20);
+                    const sortedClientIPs = Object.entries(clientIPs).sort((a, b) => (b[1].bytes || 0) - (a[1].bytes || 0)).slice(0, 20);
                     document.getElementById('client-ip-stats').innerHTML = `
                         <table>
                             <thead>
                                 <tr>
                                     <th>${I18n.t('clientIP')}</th>
                                     <th>${I18n.t('requestCount')}</th>
+                                    <th>${I18n.t('traffic')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${sortedClientIPs.map(([ip, count]) => `
+                                ${sortedClientIPs.map(([ip, stats]) => `
                                     <tr>
                                         <td><code>${ip}</code></td>
-                                        <td>${count.toLocaleString()}</td>
+                                        <td>${(stats.requests || 0).toLocaleString()}</td>
+                                        <td>${formatBytes(stats.bytes || 0)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>

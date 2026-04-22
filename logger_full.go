@@ -81,6 +81,16 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 			// 流量统计（成功的请求）
 			if status >= 200 && status < 400 && size > 0 {
 				statsCollector.AddBytesWithRate(size)
+
+				// 接收流量统计：缓存命中时数据来自本地，不计入接收流量
+				cacheStatus := c.Writer.Header().Get("X-Cache")
+				if cacheStatus != "HIT" {
+					statsCollector.AddBytesReceived(size)
+				}
+
+				// 按客户端类型和 IP 统计流量
+				statsCollector.AddClientBytes(clientType, size)
+				statsCollector.AddClientIPBytes(c.ClientIP(), size)
 			}
 		}
 
