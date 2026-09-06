@@ -708,6 +708,113 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        /* ===== 品牌动画图标：小鲸鱼驮货柜 ===== */
+        .brand-mark {
+            --bm-sky: #eaf6ff;
+            --bm-sea: #bae6fd;
+            --bm-sea-line: #7dd3fc;
+            --bm-shell-line: #7dd3fc;
+            --bm-whale: #2496ed;   /* Docker 蓝 */
+            --bm-paper: #ffffff;    /* 嘴线 / 眼白 */
+            --bm-ink: #0f172a;      /* 瞳孔 */
+            --bm-cargo: #2496ed;
+            --bm-drop: #7dd3fc;
+            --bm-dot: #10b981;
+            --bm-blush: #fb7185;
+            display: block;
+        }
+
+        [data-theme="dark"] .brand-mark {
+            --bm-sky: #111c2e;
+            --bm-sea: #16466f;
+            --bm-sea-line: #2f7fb5;
+            --bm-shell-line: #334155;
+            --bm-whale: #2f9bf5;
+            --bm-paper: #f8fafc;
+            --bm-ink: #0b1220;
+            --bm-cargo: #2f9bf5;
+            --bm-drop: #38bdf8;
+            --bm-dot: #34d399;
+            --bm-blush: #fb7185;
+        }
+
+        .bm-sky        { fill: var(--bm-sky); }
+        .bm-sea        { fill: var(--bm-sea); }
+        .bm-wave       { fill: none; stroke: var(--bm-sea-line); stroke-width: 0.7; stroke-linecap: round; }
+        .bm-shell-line { fill: none; stroke: var(--bm-shell-line); stroke-width: 1; }
+        .bm-whale      { fill: var(--bm-whale); }
+        .bm-cargo      { fill: var(--bm-cargo); }
+        .bm-eye        { fill: var(--bm-ink); }
+        .bm-shine      { fill: var(--bm-paper); }
+        .bm-blush      { fill: var(--bm-blush); opacity: 0.3; }
+        .bm-drop       { fill: var(--bm-drop); opacity: 0; }
+        .bm-dot        { fill: var(--bm-dot); }
+        .bm-halo       { fill: var(--bm-dot); transform-box: fill-box; transform-origin: 50% 50%; }
+
+        /* 单向巡游：自右侧框外匀速游向左侧框外。
+           行程 = 可见宽度 20 + 鲸鱼宽度 14.9，游出左边的下一帧正好从右边进入，
+           循环处零空窗、无折返 */
+        @keyframes bm-swim {
+            from { transform: translate(18.1px, 0); }
+            to   { transform: translate(-17.1px, 0); }
+        }
+        /* 呼吸式浮动 + 微倾（绕身体中心） */
+        @keyframes bm-tilt {
+            0%, 100% { transform: translateY(0) rotate(-1.2deg); }
+            50%      { transform: translateY(-0.5px) rotate(1.2deg); }
+        }
+        /* 喷水：三颗水滴依次升起 */
+        @keyframes bm-spout {
+            0%   { transform: translate(0, 0) scale(0.35); opacity: 0; }
+            18%  { opacity: 0.95; }
+            65%  { opacity: 0.7; }
+            100% { transform: translate(-0.3px, -4.2px) scale(0.85); opacity: 0; }
+        }
+        /* 波浪：平移正好一个波长，首尾相接无跳变 */
+        @keyframes bm-wave {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-8px); }
+        }
+        /* 眨眼 */
+        @keyframes bm-blink {
+            0%, 90%, 100% { transform: scaleY(1); }
+            94%           { transform: scaleY(0.12); }
+        }
+        /* 状态灯：呼吸 + 扩散光晕 */
+        @keyframes bm-dot {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.55; }
+        }
+        @keyframes bm-halo {
+            0%        { transform: scale(0.6); opacity: 0.5; }
+            70%, 100% { transform: scale(2); opacity: 0; }
+        }
+
+        .bm-swim  { animation: bm-swim 7s linear infinite; }
+        .bm-tilt  { animation: bm-tilt 2.6s ease-in-out infinite;
+                    transform-box: view-box; transform-origin: 11px 14px; }
+        .bm-drop  { transform-box: fill-box; transform-origin: 50% 50%;
+                    animation: bm-spout 2.4s ease-out infinite; }
+        .bm-d1 { animation-delay: 0s; }
+        .bm-d2 { animation-delay: 0.8s; }
+        .bm-d3 { animation-delay: 1.6s; }
+        .bm-wave-a { animation: bm-wave 5s linear infinite; }
+        .bm-wave-b { animation: bm-wave 7.5s linear infinite reverse; opacity: 0.7; }
+        .bm-blink  { transform-box: fill-box; transform-origin: 50% 50%;
+                     animation: bm-blink 5.4s ease-in-out infinite; }
+        .bm-dot    { animation: bm-dot 2.4s ease-in-out infinite; }
+        .bm-halo   { animation: bm-halo 2.4s ease-out infinite; }
+
+        /* 尊重系统减弱动效偏好 */
+        @media (prefers-reduced-motion: reduce) {
+            .bm-swim, .bm-tilt,
+            .bm-drop, .bm-wave-a, .bm-wave-b, .bm-blink, .bm-dot, .bm-halo {
+                animation: none;
+            }
+            .bm-drop  { opacity: 0.85; }
+            .bm-halo  { opacity: 0.25; }
+        }
     </style>
 </head>
 <body>
@@ -715,53 +822,42 @@
     <div id="login-page" class="login-container">
         <div class="login-header">
             <div class="icon">
-                <!-- Light mode icon -->
-                <svg class="icon-light" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <clipPath id="box-clip-light">
-                            <rect x="2" y="2" width="20" height="20" rx="6" />
-                        </clipPath>
-                    </defs>
-                    <rect x="2" y="2" width="20" height="20" rx="6" fill="#F0F9FF" stroke="#0EA5E9" stroke-width="1.2" />
-                    <g clip-path="url(#box-clip-light)">
-                        <g>
-                            <rect x="0" y="12" width="13" height="6" rx="1.5" fill="#2496ED" />
-                            <line x1="3.5" y1="12" x2="3.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                            <line x1="6.5" y1="12" x2="6.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                            <line x1="9.5" y1="12" x2="9.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                            <text x="2" y="12" font-size="9">🐳</text>
-                            <animateTransform attributeName="transform" type="translate" from="24 0" to="-16 0" dur="4s" repeatCount="indefinite" />
-                            <animateTransform attributeName="transform" type="translate" values="0 0; 0 -0.5; 0 0" dur="0.8s" repeatCount="indefinite" additive="sum" />
-                        </g>
-                        <path d="M2 18.5 H 22" stroke="#BAE6FD" stroke-width="0.5" stroke-dasharray="1 1" />
-                    </g>
-                    <circle cx="18" cy="6" r="1" fill="#10B981">
-                        <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite" />
-                    </circle>
-                </svg>
-                <!-- Dark mode icon -->
-                <svg class="icon-dark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display: none;">
-                    <defs>
-                        <clipPath id="inner-view-dark">
-                            <rect x="2" y="2" width="20" height="20" rx="6" />
-                        </clipPath>
-                    </defs>
-                    <rect x="2" y="2" width="20" height="20" rx="6" fill="#0F172A" stroke="#334155" stroke-width="1" />
-                    <g clip-path="url(#inner-view-dark)">
-                        <line x1="2" y1="18.5" x2="22" y2="18.5" stroke="#334155" stroke-width="0.8" stroke-dasharray="2 2" />
-                        <g>
-                            <rect x="0" y="12" width="12" height="6.5" rx="1.5" fill="#3B82F6" />
-                            <path d="M3.5 12V18.5M6 12V18.5M8.5 12V18.5" stroke="white" stroke-opacity="0.2" stroke-width="0.8"/>
-                            <text x="1.5" y="12" font-size="9" style="user-select: none;">🐳</text>
-                            <animateTransform attributeName="transform" type="translate" from="24 0" to="-16 0" dur="4s" repeatCount="indefinite" />
-                            <animateTransform attributeName="transform" type="translate" values="0 0; 0 -0.4; 0 0" dur="1s" repeatCount="indefinite" additive="sum" />
-                        </g>
-                    </g>
-                    <rect x="2" y="2" width="20" height="20" rx="6" fill="none" stroke="#3B82F6" stroke-width="1.2" opacity="0.4" />
-                    <circle cx="18" cy="6" r="1.2" fill="#10B981">
-                        <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
-                    </circle>
-                </svg>
+<svg class="brand-mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="crproxy">
+                                <defs>
+                                    <clipPath id="bm-clip-login">
+                                        <rect x="2" y="2" width="20" height="20" rx="6"/>
+                                    </clipPath>
+                                </defs>
+                                <g clip-path="url(#bm-clip-login)">
+                                    <rect class="bm-sky" x="2" y="2" width="20" height="20"/>
+                                    <rect class="bm-sea" x="2" y="16.6" width="20" height="5.4"/>
+                                    <path class="bm-wave bm-wave-a" d="M -8 16.6 q 2 -1.1 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0"/>
+                                    <path class="bm-wave bm-wave-b" d="M -8 19.3 q 2 -0.9 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0"/>
+                                    <g class="bm-swim">
+                                        <g transform="translate(4.1 4.7) scale(0.62)">
+                <g class="bm-tilt">
+                                            <!-- 头顶喷水 -->
+                                            <circle class="bm-drop bm-d1" cx="1.5" cy="9.0" r="0.65"/>
+                                            <circle class="bm-drop bm-d2" cx="1.1" cy="9.3" r="0.52"/>
+                                            <circle class="bm-drop bm-d3" cx="1.85" cy="9.25" r="0.58"/>
+                                            <!-- Moby Dock 官方身体轮廓（头朝左） -->
+                                            <path class="bm-whale" d="M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/>
+                                            <!-- 官方集装箱堆叠（单路径，缝隙透出身体蓝） -->
+                                            <path class="bm-cargo" d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185"/>
+                                            <!-- 眼睛与腮红 -->
+                                            <g class="bm-blink">
+                                                <circle class="bm-eye" cx="2.35" cy="14.3" r="0.9"/>
+                                                <circle class="bm-shine" cx="2.65" cy="14.0" r="0.32"/>
+                                            </g>
+                                            <circle class="bm-blush" cx="4.0" cy="16.1" r="0.9"/>
+                                        </g>
+                                        </g>
+                                        </g>
+                                        </g>
+                                <rect class="bm-shell-line" x="2" y="2" width="20" height="20" rx="6"/>
+                                <circle class="bm-halo" cx="19.4" cy="4.6" r="0.9"/>
+                                <circle class="bm-dot" cx="19.4" cy="4.6" r="0.9"/>
+                            </svg>
             </div>
             <h1>crproxy</h1>
             <p data-i18n="loginSubtitle">容器镜像代理管理控制台</p>
@@ -779,53 +875,42 @@
             <div class="container">
                 <div class="brand">
                     <div class="brand-icon">
-                        <!-- Light mode icon -->
-                        <svg class="icon-light" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <defs>
-                                <clipPath id="nav-clip-light">
-                                    <rect x="2" y="2" width="20" height="20" rx="6" />
-                                </clipPath>
-                            </defs>
-                            <rect x="2" y="2" width="20" height="20" rx="6" fill="#F0F9FF" stroke="#0EA5E9" stroke-width="1.2" />
-                            <g clip-path="url(#nav-clip-light)">
-                                <g>
-                                    <rect x="0" y="12" width="13" height="6" rx="1.5" fill="#2496ED" />
-                                    <line x1="3.5" y1="12" x2="3.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                                    <line x1="6.5" y1="12" x2="6.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                                    <line x1="9.5" y1="12" x2="9.5" y2="18" stroke="white" stroke-opacity="0.4" stroke-width="0.6" />
-                                    <text x="2" y="12" font-size="9">🐳</text>
-                                    <animateTransform attributeName="transform" type="translate" from="24 0" to="-16 0" dur="4s" repeatCount="indefinite" />
-                                    <animateTransform attributeName="transform" type="translate" values="0 0; 0 -0.5; 0 0" dur="0.8s" repeatCount="indefinite" additive="sum" />
-                                </g>
-                                <path d="M2 18.5 H 22" stroke="#BAE6FD" stroke-width="0.5" stroke-dasharray="1 1" />
-                            </g>
-                            <circle cx="18" cy="6" r="1" fill="#10B981">
-                                <animate attributeName="opacity" values="1;0.2;1" dur="2s" repeatCount="indefinite" />
-                            </circle>
-                        </svg>
-                        <!-- Dark mode icon -->
-                        <svg class="icon-dark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display: none;">
-                            <defs>
-                                <clipPath id="nav-clip-dark">
-                                    <rect x="2" y="2" width="20" height="20" rx="6" />
-                                </clipPath>
-                            </defs>
-                            <rect x="2" y="2" width="20" height="20" rx="6" fill="#0F172A" stroke="#334155" stroke-width="1" />
-                            <g clip-path="url(#nav-clip-dark)">
-                                <line x1="2" y1="18.5" x2="22" y2="18.5" stroke="#334155" stroke-width="0.8" stroke-dasharray="2 2" />
-                                <g>
-                                    <rect x="0" y="12" width="12" height="6.5" rx="1.5" fill="#3B82F6" />
-                                    <path d="M3.5 12V18.5M6 12V18.5M8.5 12V18.5" stroke="white" stroke-opacity="0.2" stroke-width="0.8"/>
-                                    <text x="1.5" y="12" font-size="9" style="user-select: none;">🐳</text>
-                                    <animateTransform attributeName="transform" type="translate" from="24 0" to="-16 0" dur="4s" repeatCount="indefinite" />
-                                    <animateTransform attributeName="transform" type="translate" values="0 0; 0 -0.4; 0 0" dur="1s" repeatCount="indefinite" additive="sum" />
-                                </g>
-                            </g>
-                            <rect x="2" y="2" width="20" height="20" rx="6" fill="none" stroke="#3B82F6" stroke-width="1.2" opacity="0.4" />
-                            <circle cx="18" cy="6" r="1.2" fill="#10B981">
-                                <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
-                            </circle>
-                        </svg>
+<svg class="brand-mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="crproxy">
+                                    <defs>
+                                        <clipPath id="bm-clip-nav">
+                                            <rect x="2" y="2" width="20" height="20" rx="6"/>
+                                        </clipPath>
+                                    </defs>
+                                    <g clip-path="url(#bm-clip-nav)">
+                                        <rect class="bm-sky" x="2" y="2" width="20" height="20"/>
+                                        <rect class="bm-sea" x="2" y="16.6" width="20" height="5.4"/>
+                                        <path class="bm-wave bm-wave-a" d="M -8 16.6 q 2 -1.1 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0"/>
+                                        <path class="bm-wave bm-wave-b" d="M -8 19.3 q 2 -0.9 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0 t 4 0"/>
+                                        <g class="bm-swim">
+                                            <g transform="translate(4.1 4.7) scale(0.62)">
+                <g class="bm-tilt">
+                                                <!-- 头顶喷水 -->
+                                                <circle class="bm-drop bm-d1" cx="1.5" cy="9.0" r="0.65"/>
+                                                <circle class="bm-drop bm-d2" cx="1.1" cy="9.3" r="0.52"/>
+                                                <circle class="bm-drop bm-d3" cx="1.85" cy="9.25" r="0.58"/>
+                                                <!-- Moby Dock 官方身体轮廓（头朝左） -->
+                                                <path class="bm-whale" d="M23.763 9.89c-.065-.051-.672-.51-1.954-.51-.338.001-.676.03-1.01.087-.248-1.7-1.653-2.53-1.716-2.566l-.344-.199-.226.327c-.284.438-.49.922-.612 1.43-.23.97-.09 1.882.403 2.661-.595.332-1.55.413-1.744.42H.751a.751.751 0 00-.75.748 11.376 11.376 0 00.692 4.062c.545 1.428 1.355 2.48 2.41 3.124 1.18.723 3.1 1.137 5.275 1.137.983.003 1.963-.086 2.93-.266a12.248 12.248 0 003.823-1.389c.98-.567 1.86-1.288 2.61-2.136 1.252-1.418 1.998-2.997 2.553-4.4h.221c1.372 0 2.215-.549 2.68-1.009.309-.293.55-.65.707-1.046l.098-.288Z"/>
+                                                <!-- 官方集装箱堆叠（单路径，缝隙透出身体蓝） -->
+                                                <path class="bm-cargo" d="M13.983 11.078h2.119a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.119a.185.185 0 00-.185.185v1.888c0 .102.083.185.185.185m-2.954-5.43h2.118a.186.186 0 00.186-.186V3.574a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m0 2.716h2.118a.187.187 0 00.186-.186V6.29a.186.186 0 00-.186-.185h-2.118a.185.185 0 00-.185.185v1.887c0 .102.082.185.185.186m-2.93 0h2.12a.186.186 0 00.184-.186V6.29a.185.185 0 00-.185-.185H8.1a.185.185 0 00-.185.185v1.887c0 .102.083.185.185.186m-2.964 0h2.119a.186.186 0 00.185-.186V6.29a.185.185 0 00-.185-.185H5.136a.186.186 0 00-.186.185v1.887c0 .102.084.185.186.186m5.893 2.715h2.118a.186.186 0 00.186-.185V9.006a.186.186 0 00-.186-.186h-2.118a.185.185 0 00-.185.185v1.888c0 .102.082.185.185.185m-2.93 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.083.185.185.185m-2.964 0h2.119a.185.185 0 00.185-.185V9.006a.185.185 0 00-.184-.186h-2.12a.186.186 0 00-.186.186v1.887c0 .102.084.185.186.185m-2.92 0h2.12a.185.185 0 00.184-.185V9.006a.185.185 0 00-.184-.186h-2.12a.185.185 0 00-.184.185v1.888c0 .102.082.185.185.185"/>
+                                                <!-- 眼睛与腮红 -->
+                                                <g class="bm-blink">
+                                                    <circle class="bm-eye" cx="2.35" cy="14.3" r="0.9"/>
+                                                    <circle class="bm-shine" cx="2.65" cy="14.0" r="0.32"/>
+                                                </g>
+                                                <circle class="bm-blush" cx="4.0" cy="16.1" r="0.9"/>
+                                            </g>
+                                            </g>
+                                            </g>
+                                            </g>
+                                    <rect class="bm-shell-line" x="2" y="2" width="20" height="20" rx="6"/>
+                                    <circle class="bm-halo" cx="19.4" cy="4.6" r="0.9"/>
+                                    <circle class="bm-dot" cx="19.4" cy="4.6" r="0.9"/>
+                                </svg>
                     </div>
                     <h1>crproxy</h1>
                 </div>
@@ -1127,18 +1212,8 @@
                 } else {
                     theme = this.userPreference;
                 }
+                // 品牌图标配色通过 CSS 变量跟随 [data-theme]，无需单独切换
                 document.documentElement.setAttribute('data-theme', theme);
-                this.updateBrandIcons(theme);
-            },
-
-            updateBrandIcons(theme) {
-                // 更新登录页和导航栏的品牌图标
-                document.querySelectorAll('.icon-light').forEach(el => {
-                    el.style.display = theme === 'dark' ? 'none' : 'block';
-                });
-                document.querySelectorAll('.icon-dark').forEach(el => {
-                    el.style.display = theme === 'dark' ? 'block' : 'none';
-                });
             },
 
             updateIcon() {
