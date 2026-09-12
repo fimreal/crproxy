@@ -621,6 +621,21 @@ func (lt *LiveTracker) Snapshot() liveSnapshot {
 	}
 }
 
+// ActiveDownloads 返回当前仍在进行的 blob 下载任务数。
+// 重启前的等待逻辑用它判断「客户端还在拉镜像」：manifest/token 等小请求
+// 生命周期极短，不计入，否则重启几乎永远等不到清零。
+func (lt *LiveTracker) ActiveDownloads() int {
+	lt.mu.RLock()
+	defer lt.mu.RUnlock()
+	n := 0
+	for _, t := range lt.active {
+		if t.Kind == "blob" {
+			n++
+		}
+	}
+	return n
+}
+
 // collectAgg 汇总聚合表，并把在途任务的字节数合并进来。
 func collectAgg(m map[string]*liveAgg, pending map[string]int64, limit int) []liveAggView {
 	out := make([]liveAggView, 0, len(m))

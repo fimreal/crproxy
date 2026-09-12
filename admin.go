@@ -348,6 +348,17 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			go performRestart()
 		})
 
+		// 取消重启：仅在「等待在途下载结束」阶段有效。
+		// 一旦进入优雅关闭/exec，等待已结束，取消请求会被拒绝（409）。
+		adminAPI.POST("/restart/cancel", func(c *gin.Context) {
+			if !restartState.requestCancel() {
+				c.JSON(http.StatusConflict, gin.H{"error": "no cancellable restart in progress"})
+				return
+			}
+			slog.Info("restart canceled via admin api", "client_ip", c.ClientIP())
+			c.JSON(http.StatusOK, gin.H{"canceled": true})
+		})
+
 		// 重载配置
 		adminAPI.POST("/config/reload", func(c *gin.Context) {
 			// 从文件重新加载配置

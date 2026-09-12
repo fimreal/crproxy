@@ -251,3 +251,155 @@ func TestValidateRestartBinaryRejectsMissingFile(t *testing.T) {
 		t.Fatal("对一个不存在的文件应当预检失败")
 	}
 }
+
+// waitForDownloadsQuiet 测试的公共准备：缩短策略参数并隔离全局状态
+func setupDownloadWaitTest(t *testing.T, quiet, poll time.Duration) {
+	t.Helper()
+	oldFn, oldQuiet := restartActiveDownloadsFn, restartQuietPeriod
+	oldPoll := restartWaitPollInterval
+	oldState := restartState
+	t.Cleanup(func() {
+		restartActiveDownloadsFn, restartQuietPeriod = oldFn, oldQuiet
+		restartWaitPollInterval = oldPoll
+		restartState = oldState
+	})
+	restartState = &restartTracker{}
+	restartQuietPeriod = quiet
+	restartWaitPollInterval = poll
+}
+
+// 没有在途下载时应立即放行，不人为拖慢重启
+func TestWaitForDownloadsQuietReturnsImmediatelyWhenIdle(t *testing.T) {
+	setupDownloadWaitTest(t, 100*time.Millisecond, 10*time.Millisecond)
+
+	restartActiveDownloadsFn = func() int { return 0 }
+
+	start := time.Now()
+	waitForDownloadsQuiet()
+	if elapsed := time.Since(start); elapsed >= 100*time.Millisecond {
+		t.Errorf("无下载时应立即返回，实际等待 %v", elapsed)
+	}
+	if _, start, _ := restartState.waitSnapshot(); !start.IsZero() {
+		t.Error("无下载时不应进入等待状态")
+	}
+}
+
+// 有下载时应等待其结束，再满一个静默期才放行；静默期内不应提前返回
+func TestWaitForDownloadsQuietWaitsForDrainAndQuietPeriod(t *testing.T) {
+	setupDownloadWaitTest(t, 120*time.Millisecond, 20*time.Millisecond)
+
+	const quietTicks = 3
+	calls := 0
+	restartActiveDownloadsFn = func() int {
+		calls++
+		// 前几次轮询各有 2 个下载在跑，之后清零
+		if calls <= quietTicks {
+			return 2
+		}
+		return 0
+	}
+
+	start := time.Now()
+	waitForDownloadsQuiet()
+	elapsed := time.Since(start)
+
+	if elapsed < 120*time.Millisecond {
+		t.Errorf("应至少等待一个静默期(%v)，实际 %v", 120*time.Millisecond, elapsed)
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("下载很快结束后不应等太久，实际 %v", elapsed)
+	}
+	if waiting, _, _ := restartState.waitSnapshot(); waiting {
+		t.Error("等待结束后 waiting 应复位")
+	}
+}
+
+// 下载持续存在时应一直等待（无上限），只有下载停了才放行——
+// 用「第 N 次轮询后清零」模拟一个足够长的下载，验证中途不会提前退出
+func TestWaitForDownloadsQuietKeepsWaitingWhileDownloadsPersist(t *testing.T) {
+	setupDownloadWaitTest(t, 60*time.Millisecond, 20*time.Millisecond)
+
+	const busyTicks = 15 // 15 × 20ms = 300ms，远超静默期
+	calls := 0
+	restartActiveDownloadsFn = func() int {
+		calls++
+		if calls <= busyTicks {
+			return 3
+		}
+		return 0
+	}
+
+	start := time.Now()
+	waitForDownloadsQuiet()
+	elapsed := time.Since(start)
+
+	// 若存在错误的上限兜底，300ms 内早就放行了；实际应等到下载清零后再满静默期
+	if elapsed < time.Duration(busyTicks)*20*time.Millisecond {
+		t.Errorf("下载持续期间不应提前放行，实际只等了 %v", elapsed)
+	}
+}
+
+// 等待下载期间可以取消重启：waitForDownloadsQuiet 返回 false，
+// 且 requested 被复位，允许之后重新发起重启
+func TestRestartCancelWhileWaitingForDownloads(t *testing.T) {
+	setupDownloadWaitTest(t, 10*time.Second, 10*time.Millisecond)
+
+	restartActiveDownloadsFn = func() int { return 2 }
+
+	if !restartState.begin() {
+		t.Fatal("准备失败：无法登记重启")
+	}
+	done := make(chan bool, 1)
+	go func() { done <- waitForDownloadsQuiet() }()
+
+	// 给等待循环留时间进入等待状态
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if waiting, _, _ := restartState.waitSnapshot(); waiting {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if waiting, _, _ := restartState.waitSnapshot(); !waiting {
+		t.Fatal("等待循环未进入等待状态")
+	}
+
+	if !restartState.requestCancel() {
+		t.Fatal("等待阶段应允许取消")
+	}
+	if <-done {
+		t.Error("取消后 waitForDownloadsQuiet 应返回 false")
+	}
+	if waiting, _, _ := restartState.waitSnapshot(); waiting {
+		t.Error("取消后 waiting 应复位")
+	}
+	requested, _ := restartState.snapshot()
+	if requested {
+		t.Error("取消后应复位 requested，允许重新发起重启")
+	}
+}
+
+// 非等待阶段取消应被拒绝：从未开始等待 / 等待已正常结束（进入关闭阶段）
+func TestRestartCancelRejectedOutsideWaitingPhase(t *testing.T) {
+	setupDownloadWaitTest(t, 50*time.Millisecond, 10*time.Millisecond)
+
+	if restartState.requestCancel() {
+		t.Error("未开始等待时取消应被拒绝")
+	}
+
+	// 等待已正常结束（下载清零 + 静默期满）
+	calls := 0
+	restartActiveDownloadsFn = func() int {
+		calls++
+		if calls <= 2 {
+			return 1
+		}
+		return 0
+	}
+	if !waitForDownloadsQuiet() {
+		t.Fatal("正常等待应放行重启")
+	}
+	if restartState.requestCancel() {
+		t.Error("等待结束后取消应被拒绝（已进入关闭阶段）")
+	}
+}

@@ -1539,6 +1539,9 @@
                             <span id="restart-btn-label" data-i18n="restartService">重启服务</span>
                         </button>
                         <span id="restart-pending" class="tag running" style="display: none;" data-i18n="restartPendingTag">有新版本待生效</span>
+                        <button id="restart-cancel-btn" class="btn btn-secondary" style="display: none;" onclick="doRestartCancel()">
+                            <span data-i18n="restartCancel">取消重启</span>
+                        </button>
                     </div>
                     <div id="restart-status" class="update-error" style="display: none;"></div>
                 </div>
@@ -1850,9 +1853,14 @@
                     restartHintSupervisor: '原地 exec 同一个 PID，supervisor 不会误判为崩溃。',
                     restartHintStandalone: '未检测到进程管理器：原地 exec 重启，无需手动拉起。',
                     restartHintUnknown: '原地 exec 重启，PID 保持不变。',
-                    restartConfirm: '重启会先停止接收新请求并等待在途请求结束（最多 5 秒），期间服务短暂不可用。确定继续吗？',
+                    restartConfirm: '重启前会先等待正在进行的下载结束（不设时限，优先保证下载不中断），并在无下载流量 30 秒后执行；随后停止接收新请求并等待在途请求结束（最多 5 秒），期间服务短暂不可用。确定继续吗？',
                     restartInProgress: '正在重启…',
                     restartWaiting: '等待服务恢复…',
+                    restartWaitDownloads: '检测到 {n} 个下载任务，等待结束后将自动重启…',
+                    restartWaitElapsed: '已等待 {s} 秒',
+                    restartCancel: '取消重启',
+                    restartCanceled: '已取消重启，服务继续正常运行',
+                    restartCancelFailed: '取消失败，重启可能已进入最后阶段',
                     restartDone: '服务已重启，请重新登录',
                     restartTimeout: '等待服务恢复超时，请检查服务日志或手动重启',
                     restartUnsupported: '当前平台不支持从 Web 端重启，请手动重启服务',
@@ -2077,9 +2085,14 @@
                     restartHintSupervisor: 'Restarts in place via exec with the same PID, so supervisor does not treat it as a crash.',
                     restartHintStandalone: 'No process manager detected: restarts in place via exec, nothing to bring it back manually.',
                     restartHintUnknown: 'Restarts in place via exec, keeping the same PID.',
-                    restartConfirm: 'Restarting stops accepting new requests and waits for in-flight ones to finish (up to 5s), so the service is briefly unavailable. Continue?',
+                    restartConfirm: 'Restarting first waits for active downloads to finish (no time limit, downloads are never interrupted), then triggers after 30s with no download traffic; it then stops accepting new requests and waits for in-flight ones to finish (up to 5s), so the service is briefly unavailable. Continue?',
                     restartInProgress: 'Restarting…',
                     restartWaiting: 'Waiting for the service to come back…',
+                    restartWaitDownloads: '{n} download(s) in progress, restart will start automatically once they finish…',
+                    restartWaitElapsed: 'waited {s}s',
+                    restartCancel: 'Cancel restart',
+                    restartCanceled: 'Restart canceled, service keeps running',
+                    restartCancelFailed: 'Cancel failed, the restart may have entered its final phase',
                     restartDone: 'Service restarted, please sign in again',
                     restartTimeout: 'Timed out waiting for the service; check the logs or restart manually',
                     restartUnsupported: 'This platform cannot restart in place from the web UI, please restart the service manually',
@@ -3288,6 +3301,12 @@
             const pending = document.getElementById('restart-pending');
             pending.style.display = info.restartPending ? 'inline-block' : 'none';
 
+            // 等待在途下载期间允许取消重启；进入关闭/exec 阶段后不可取消
+            const cancelBtn = document.getElementById('restart-cancel-btn');
+            if (cancelBtn) {
+                cancelBtn.style.display = info.waitingDownloads ? 'inline-block' : 'none';
+            }
+
             const btn = document.getElementById('restart-btn');
             const label = document.getElementById('restart-btn-label');
             const canRestart = info.supported && !info.updateRunning && !info.restarting;
@@ -3301,6 +3320,9 @@
                 btn.title = I18n.t('restartUnsupported');
             } else if (info.updateRunning) {
                 btn.title = I18n.t('restartBlockedByUpdate');
+            } else if (info.waitingDownloads) {
+                // 页面在重启等待期间被刷新/重新进入时，把等待状态同步出来
+                showRestartStatus(restartWaitText(info), 'info');
             }
         }
 
@@ -3343,13 +3365,23 @@
             }
         }
 
+        // 重启等待期间的状态文案（服务端在等在途下载结束时返回 waitingDownloads）
+        function restartWaitText(info) {
+            let text = I18n.t('restartWaitDownloads').replace('{n}', info.activeDownloads || 0);
+            if (info.waitElapsed) {
+                text += ' · ' + I18n.t('restartWaitElapsed').replace('{s}', Math.floor(info.waitElapsed));
+            }
+            return text;
+        }
+
         // 重启后确认服务恢复。不能靠"先探到失败、再探到成功"——原地 exec 的
         // 停机窗口只有几十毫秒，轮询几乎必然错过失败。改用确定性判据：
         //   a) 进程启动时间（startedAt）变了 → 已经是新进程；
         //   b) 旧 token 失效（401）→ token 在内存里，进程被替换后必然失效。
         async function waitForServiceBack(startedAtBefore) {
             showRestartStatus(I18n.t('restartWaiting'), 'info');
-            const deadline = Date.now() + 90000;
+            // 等待在途下载期间会不断放宽 deadline，所以必须用 let
+            let deadline = Date.now() + 90000;
             while (Date.now() < deadline) {
                 await new Promise(resolve => setTimeout(resolve, 500));
                 let response = null;
@@ -3374,9 +3406,23 @@
                     } catch (error) {
                         continue;
                     }
+                    // 同步按钮状态（含"取消重启"按钮的显隐）
+                    renderRestartInfo(info);
+                    // 服务端正在等待在途下载结束（无时限，结束后再静默 30 秒）：
+                    // 刷新等待信息，并放宽本循环的超时，避免误报"恢复超时"
+                    if (info.waitingDownloads) {
+                        showRestartStatus(restartWaitText(info), 'info');
+                        if (Date.now() + 60000 > deadline) deadline = Date.now() + 60000;
+                        continue;
+                    }
                     if (startedAtBefore && info.startedAt && info.startedAt !== startedAtBefore) {
                         showRestartStatus(I18n.t('restartDone'), 'done');
                         setTimeout(() => location.reload(), 2000);
+                        return;
+                    }
+                    // 进程没被替换、也不再处于重启中 → 等待阶段被取消了
+                    if (!info.restarting) {
+                        showRestartStatus(I18n.t('restartCanceled'), 'info');
                         return;
                     }
                 }
@@ -3401,15 +3447,42 @@
             const btn = document.getElementById('restart-btn');
             btn.disabled = true;
             try {
-                await fetch('/admin/api/restart', {
+                try {
+                    await fetch('/admin/api/restart', {
+                        method: 'POST',
+                        headers: {'Authorization': `Bearer ${token}`}
+                    });
+                } catch (error) {
+                    // 进程被替换时连接可能直接断开，这是预期内的
+                }
+                await waitForServiceBack(startedAtBefore);
+            } finally {
+                // 无论轮询是否意外抛错，都必须恢复按钮，否则重启入口会永久卡死
+                btn.disabled = false;
+            }
+        }
+
+        // 取消重启：仅服务端还在等待在途下载时有效（进入关闭/exec 后返回 409）
+        async function doRestartCancel() {
+            const btn = document.getElementById('restart-cancel-btn');
+            if (btn) btn.disabled = true;
+            try {
+                const response = await fetch('/admin/api/restart/cancel', {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${token}`}
                 });
+                if (response.ok) {
+                    showRestartStatus(I18n.t('restartCanceled'), 'info');
+                    // 刷新按钮显隐与重启按钮可用状态
+                    loadRestartInfo();
+                } else {
+                    showToast(I18n.t('restartCancelFailed'), 'error');
+                    if (btn) btn.disabled = false;
+                }
             } catch (error) {
-                // 进程被替换时连接可能直接断开，这是预期内的
+                showToast(I18n.t('networkError'), 'error');
+                if (btn) btn.disabled = false;
             }
-            await waitForServiceBack(startedAtBefore);
-            btn.disabled = false;
         }
 
         // 检查更新

@@ -99,6 +99,12 @@ type restartTracker struct {
 	mu        sync.Mutex
 	requested bool
 	errMsg    string
+	// 等待在途下载结束期间的状态（供 /admin/api/restart/info 展示）。
+	// 只有这个阶段可以取消；一旦进入优雅关闭/exec，取消一律拒绝。
+	waiting    bool
+	waitStart  time.Time
+	waitActive int
+	cancelReq  bool
 }
 
 var restartState = &restartTracker{}
@@ -129,6 +135,62 @@ func (r *restartTracker) snapshot() (requested bool, errMsg string) {
 	return r.requested, r.errMsg
 }
 
+// beginWait 进入「等待在途下载结束」阶段。
+func (r *restartTracker) beginWait(active int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.waiting = true
+	r.waitStart = time.Now()
+	r.waitActive = active
+	r.cancelReq = false
+}
+
+// updateWait 刷新等待期间仍在进行的下载数。
+func (r *restartTracker) updateWait(active int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.waitActive = active
+}
+
+// requestCancel 在等待阶段登记一次取消请求。
+// 返回 false 表示当前没有可取消的等待（不在等待中，或已进入关闭/exec 阶段）。
+func (r *restartTracker) requestCancel() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.waiting {
+		return false
+	}
+	r.cancelReq = true
+	return true
+}
+
+// waitCanceled 读取等待期间是否收到过取消请求（等待循环轮询用）。
+func (r *restartTracker) waitCanceled() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cancelReq
+}
+
+// finishWait 结束等待阶段，返回期间是否收到过取消请求。
+// 与 requestCancel 共用同一把锁完成「等待中 → 不可取消」的原子切换：
+// 一旦返回（无论是否取消），后续的取消请求都会被拒绝。
+func (r *restartTracker) finishWait() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	canceled := r.cancelReq
+	r.cancelReq = false
+	r.waiting = false
+	r.waitActive = 0
+	return canceled
+}
+
+// waitSnapshot 读取等待阶段状态。
+func (r *restartTracker) waitSnapshot() (waiting bool, start time.Time, active int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.waiting, r.waitStart, r.waitActive
+}
+
 // ============================ 重启流程 ============================
 
 // 可注入的钩子（由 main.go / 测试替换）
@@ -141,6 +203,12 @@ var (
 	restartShutdownFn = func(ctx context.Context) error { return nil }
 	// restartValidateFn 重启前预检：确认新二进制能正常执行
 	restartValidateFn = validateRestartBinary
+	// restartActiveDownloadsFn 统计当前在途的下载任务数（测试可替换）
+	restartActiveDownloadsFn = func() int { return live.ActiveDownloads() }
+	// restartQuietPeriod 下载全部结束后的静默期：连续这么久没有下载才重启
+	restartQuietPeriod = 30 * time.Second
+	// restartWaitPollInterval 等待期间轮询在途下载数的间隔
+	restartWaitPollInterval = time.Second
 )
 
 const (
@@ -165,6 +233,10 @@ type restartInfoView struct {
 	UpdateRunning  bool               `json:"updateRunning"`
 	Restarting     bool               `json:"restarting"`
 	ValidateHint   string             `json:"validateHint,omitempty"`
+	// 在途下载与重启前等待状态（等待中才有 waitElapsed）
+	ActiveDownloads  int     `json:"activeDownloads"`
+	WaitingDownloads bool    `json:"waitingDownloads"`
+	WaitElapsed      float64 `json:"waitElapsed,omitempty"`
 }
 
 // processStartAt 记录本进程的启动时间（供 uptime 展示与重启验证）
@@ -178,18 +250,24 @@ func restartInfo() restartInfoView {
 	}
 	progress := updateProgress.snapshot()
 
-	return restartInfoView{
-		Supported:      restartSupported,
-		Method:         restartMethodName,
-		Environment:    detectRestartEnvironment(),
-		PID:            restartPID(),
-		StartedAt:      processStartAt.UnixMilli(),
-		Uptime:         time.Since(processStartAt).Seconds(),
-		Version:        version,
-		RestartPending: pending,
-		UpdateRunning:  progress.Running,
-		Restarting:     requested,
+	view := restartInfoView{
+		Supported:       restartSupported,
+		Method:          restartMethodName,
+		Environment:     detectRestartEnvironment(),
+		PID:             restartPID(),
+		StartedAt:       processStartAt.UnixMilli(),
+		Uptime:          time.Since(processStartAt).Seconds(),
+		Version:         version,
+		RestartPending:  pending,
+		UpdateRunning:   progress.Running,
+		Restarting:      requested,
+		ActiveDownloads: restartActiveDownloadsFn(),
 	}
+	if waiting, start, _ := restartState.waitSnapshot(); waiting {
+		view.WaitingDownloads = true
+		view.WaitElapsed = time.Since(start).Seconds()
+	}
+	return view
 }
 
 // validateRestartBinary 跑一次新二进制的 -version，确认它真的能执行。
@@ -222,7 +300,7 @@ func requestRestart() bool {
 }
 
 // performRestart 延迟一小段时间（让 /restart 的响应先回到浏览器），
-// 然后优雅关闭 HTTP 服务并原地 exec 新二进制。
+// 然后等待在途下载结束、优雅关闭 HTTP 服务并原地 exec 新二进制。
 func performRestart() {
 	time.Sleep(restartDelay)
 
@@ -233,10 +311,18 @@ func performRestart() {
 		return
 	}
 
-	// 预检：新二进制跑不起来就不重启，保持当前服务存活
+	// 预检：新二进制跑不起来就不重启，保持当前服务存活。
+	// 放在等待下载之前——预检失败应立刻放弃，不该让用户白等几十秒。
 	if err := restartValidateFn(exe); err != nil {
 		restartState.fail(err)
 		slog.Error("restart aborted: new binary failed pre-flight check", "error", err, "path", exe)
+		return
+	}
+
+	// 等待在途下载结束（结束后再静默一段时间），期间不关闭 HTTP 服务。
+	// 等待阶段可随时通过 /admin/api/restart/cancel 取消整次重启。
+	if !waitForDownloadsQuiet() {
+		slog.Info("restart canceled while waiting, service keeps running", "pid", restartPID())
 		return
 	}
 
@@ -257,4 +343,68 @@ func performRestart() {
 		slog.Error("in-place restart failed, exiting", "error", err)
 		os.Exit(1)
 	}
+}
+
+// waitForDownloadsQuiet 等待在途下载结束，再留一段静默期后才放行重启。
+//
+//   - 请求重启的瞬间没有任何下载 → 立即放行，不人为拖慢正常重启；
+//   - 有下载在跑 → 等它们结束，且连续 restartQuietPeriod 秒没有任何下载
+//     才放行（给「上一层拉完、马上开始下一层」的连续拉取留缓冲，
+//     静默期内出现新下载则重新计时）；
+//   - 不设等待上限：宁可重启慢，也不打断客户端的下载。等待期间 HTTP
+//     服务照常工作，/restart/info 会通过 waitingDownloads /
+//     activeDownloads / waitElapsed 反映进度；每分钟记一条进度日志，
+//     避免长等待时看起来像卡死；
+//   - 等待期间收到取消请求（/admin/api/restart/cancel）→ 放弃本次重启，
+//     返回 false，服务继续正常运行，之后可以重新发起重启。
+//
+// 返回 true 表示可以继续重启流程，false 表示已被取消。
+func waitForDownloadsQuiet() bool {
+	initial := restartActiveDownloadsFn()
+	if initial == 0 {
+		return true
+	}
+
+	restartState.beginWait(initial)
+	slog.Info("waiting for active downloads before restart",
+		"downloads", initial, "quiet_period", restartQuietPeriod)
+
+	start := time.Now()
+	lastBusy := start
+	lastLogged := start
+	for {
+		time.Sleep(restartWaitPollInterval)
+
+		if restartState.waitCanceled() {
+			break
+		}
+
+		active := restartActiveDownloadsFn()
+		now := time.Now()
+		if active > 0 {
+			lastBusy = now
+		}
+		restartState.updateWait(active)
+
+		if now.Sub(lastBusy) >= restartQuietPeriod {
+			break
+		}
+		if now.Sub(lastLogged) >= time.Minute {
+			lastLogged = now
+			slog.Info("still waiting for active downloads before restart",
+				"active", active, "waited", now.Sub(start).Round(time.Second))
+		}
+	}
+
+	if canceled := restartState.finishWait(); canceled {
+		// 复位 requested，允许之后重新发起重启
+		restartState.fail(nil)
+		slog.Info("restart canceled during download wait",
+			"waited", time.Since(start).Round(time.Second))
+		return false
+	}
+
+	slog.Info("download wait finished, proceeding with restart",
+		"waited", time.Since(start).Round(time.Second))
+	return true
 }
