@@ -320,6 +320,20 @@ func updateUserAgent() string {
 	return fmt.Sprintf("crproxy/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
 }
 
+// startupExecutablePath 返回进程启动时所在的二进制路径。
+//
+// 不能在运行期重新调 os.Executable()：Linux 上它读 /proc/self/exe，
+// 指向"当前 inode 的路径"。updater 用 rename 替换文件后，运行中的旧
+// 二进制会被改名到 *.backup，此时再取到的就是旧版本的路径——用它做
+// 原地重启会把旧版本 exec 起来（新版本躺在原路径上无人问津）。
+// 因此一律使用启动时记录的 initialBinaryPath。
+func startupExecutablePath() (string, error) {
+	if initialBinaryPath != "" {
+		return initialBinaryPath, nil
+	}
+	return updateExecutablePath()
+}
+
 // recordStartupBinaryInfo 记录启动时的二进制文件信息
 func recordStartupBinaryInfo() error {
 	execPath, err := updateExecutablePath()
@@ -345,7 +359,9 @@ func isRestartPending() (bool, error) {
 		return false, nil
 	}
 
-	execPath, err := updateExecutablePath()
+	// 必须用启动时记录的路径（见 startupExecutablePath 的说明）：
+	// os.Executable() 在更新替换后会指向改名的 .backup（旧版本）
+	execPath, err := startupExecutablePath()
 	if err != nil {
 		return false, fmt.Errorf("failed to get executable path: %w", err)
 	}
@@ -391,7 +407,9 @@ func checkWritePermission(execPath string) error {
 
 // performUpdate 执行更新。整个过程的状态会写入 updateProgress，供前端轮询。
 func performUpdate() (newVersion string, err error) {
-	execPath, err := updateExecutablePath()
+	// 用启动时记录的路径作为替换目标：即便本进程的 inode 已被之前的
+	// 更新改名，新版本也始终应该装回启动时的原始路径
+	execPath, err := startupExecutablePath()
 	if err != nil {
 		return "", fmt.Errorf("failed to get executable path: %w", err)
 	}

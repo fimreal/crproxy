@@ -49,8 +49,10 @@ var (
 	// restartPPID 用于区分"真的被 init 托管"和"环境变量恰好带着"：
 	// 被 systemd/launchd 托管的进程父进程是 1，终端里手动起的不是。
 	restartPPID = os.Getppid
-	// 复用 updater.go 里的可执行文件定位（同一语义，测试同样可注入）
-	restartExecutablePath = func() (string, error) { return updateExecutablePath() }
+	// 用启动时记录的二进制路径做原地重启（同一语义，测试同样可注入）。
+	// 不能用 os.Executable()：更新替换后 /proc/self/exe 跟随 rename 指向
+	// *.backup（旧版本），用它 exec 会把旧版本重新拉起来。
+	restartExecutablePath = startupExecutablePath
 )
 
 // detectRestartEnvironment 判断当前的部署形态。
