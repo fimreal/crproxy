@@ -1,7 +1,8 @@
 FROM golang:latest AS builder
+ARG VERSION=unknown
 COPY . /srv/crproxy
 # ENV GOPROXY="https://goproxy.cn,direct"
-RUN cd /srv/crproxy && make build && ls -l bin
+RUN cd /srv/crproxy && make build VERSION=${VERSION} && ls -l bin
 
 # download ca-certificates
 FROM alpine:latest AS ca

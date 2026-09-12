@@ -24,10 +24,11 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: go build (full version)
-        run: make all && ls -l bin
+        # CI 浅克隆没有 tag，git describe 会 fallback 成 unknown；直接用 tag 名注入
+        run: make all VERSION=${{ github.ref_name }} && ls -l bin
 
       - name: go build (lite version)
-        run: make all-lite && ls -l bin
+        run: make all-lite VERSION=${{ github.ref_name }} && ls -l bin
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v3
@@ -77,6 +78,8 @@ jobs:
           push: true
           file: Dockerfile
           provenance: false
+          build-args: |
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |-
@@ -119,6 +122,8 @@ jobs:
           push: true
           file: Dockerfile.lite
           provenance: false
+          build-args: |
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           labels: |-
