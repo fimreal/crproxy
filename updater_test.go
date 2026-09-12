@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -125,6 +126,44 @@ func TestStartupExecutablePathFallsBackToExecutable(t *testing.T) {
 	}
 	if got != fallback {
 		t.Errorf("startupExecutablePath() = %q, want %q", got, fallback)
+	}
+}
+
+// 同一进程内连续两次更新：备份是滚动单份，不应累积出多个 .backup/.new 文件。
+func TestPerformUpdateKeepsSingleRollingBackup(t *testing.T) {
+	payload := testBinaryPayload(int(updateMinBinarySize) + 4096)
+	target, _ := setupFakeUpdater(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		w.WriteHeader(http.StatusOK)
+		w.Write(payload)
+	})
+
+	for round := 1; round <= 2; round++ {
+		if _, err := performUpdate(); err != nil {
+			t.Fatalf("第 %d 次 performUpdate 失败: %v", round, err)
+		}
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(target))
+	if err != nil {
+		t.Fatalf("读取目录失败: %v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	want := []string{filepath.Base(target), filepath.Base(target) + ".backup"}
+	if len(names) != len(want) {
+		t.Errorf("连续两次更新后目录应有 %d 个文件, got %d 个: %v（备份在累积）", len(want), len(names), names)
+	}
+	sort.Strings(names)
+	wantSorted := append([]string(nil), want...)
+	sort.Strings(wantSorted)
+	for i := range wantSorted {
+		if i >= len(names) || names[i] != wantSorted[i] {
+			t.Errorf("目录内容 = %v, want %v", names, wantSorted)
+			break
+		}
 	}
 }
 
