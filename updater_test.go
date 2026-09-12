@@ -86,6 +86,48 @@ func setupFakeUpdater(t *testing.T, serveAsset func(w http.ResponseWriter, r *ht
 	return target, srv
 }
 
+// 更新替换用 rename 把运行中的二进制改名成 *.backup 后，Linux 上 os.Executable()
+// （/proc/self/exe）会跟随 inode 返回 .backup 的路径。安装目标与重启路径必须仍然
+// 使用启动时记录的原始路径，否则会"更新成功、重启跑回旧版本"（v0.5.11 修复的 bug）。
+func TestStartupExecutablePathPrefersRecordedPath(t *testing.T) {
+	oldPath, oldExec := initialBinaryPath, updateExecutablePath
+	t.Cleanup(func() { initialBinaryPath, updateExecutablePath = oldPath, oldExec })
+
+	dir := t.TempDir()
+	recorded := filepath.Join(dir, "crproxy")
+	// 模拟 Linux：/proc/self/exe 在 rename 之后指向 .backup（旧版本的当前位置）
+	renamed := filepath.Join(dir, "crproxy.backup")
+	initialBinaryPath = recorded
+	updateExecutablePath = func() (string, error) { return renamed, nil }
+
+	got, err := startupExecutablePath()
+	if err != nil {
+		t.Fatalf("startupExecutablePath 失败: %v", err)
+	}
+	if got != recorded {
+		t.Errorf("startupExecutablePath() = %q, want 启动时记录的 %q（重定向到旧版本路径）", got, recorded)
+	}
+}
+
+// initialBinaryPath 未记录时（防御性场景）应回退到 os.Executable
+func TestStartupExecutablePathFallsBackToExecutable(t *testing.T) {
+	oldPath, oldExec := initialBinaryPath, updateExecutablePath
+	t.Cleanup(func() { initialBinaryPath, updateExecutablePath = oldPath, oldExec })
+
+	dir := t.TempDir()
+	fallback := filepath.Join(dir, "fallback-crproxy")
+	initialBinaryPath = ""
+	updateExecutablePath = func() (string, error) { return fallback, nil }
+
+	got, err := startupExecutablePath()
+	if err != nil {
+		t.Fatalf("startupExecutablePath 失败: %v", err)
+	}
+	if got != fallback {
+		t.Errorf("startupExecutablePath() = %q, want %q", got, fallback)
+	}
+}
+
 // 正常流程：下载 → 校验 → 备份 → 替换，并且全程进度可查。
 func TestPerformUpdateReplacesBinaryAndReportsProgress(t *testing.T) {
 	payload := testBinaryPayload(int(updateMinBinarySize) + 4096)
