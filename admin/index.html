@@ -1244,6 +1244,7 @@
                             <tr>
                                 <th data-i18n="registryName">名称</th>
                                 <th>URL</th>
+                                <th data-i18n="proxyAddress">代理使用地址</th>
                                 <th style="width: 100px;" data-i18n="operation">操作</th>
                             </tr>
                         </thead>
@@ -1705,6 +1706,8 @@
                     addRegistry: '添加 Registry',
                     deleteConfirm: '确认删除此 Registry？',
                     registryConfig: 'Registry 映射配置',
+                    proxyAddress: '代理使用地址',
+                    proxyAddrUnavailable: '未配置域名后缀',
                     operation: '操作',
 
                     // 服务配置
@@ -2309,15 +2312,26 @@
                 // 填充 Registry 表格
                 const tbody = document.getElementById('registry-tbody');
                 tbody.innerHTML = '';
+                const domainSuffix = (config.domainSuffix || '').trim();
                 for (const [name, url] of Object.entries(config.registryMap || {})) {
                     const isDefault = name === 'default';
                     const displayName = isDefault ? 'default' : (name === '-' ? '(未命名)' : name);
                     const canDelete = name !== '-' && name !== 'default';
                     const badge = isDefault ? '<span class="badge" style="background: var(--primary-muted); color: var(--primary-dark);">当前默认</span>' : '';
+                    // 代理使用地址：与 proxy.go findRegistryURL 的路由规则保持一致
+                    // host == domainSuffix 走 default；host == "{name}.{domainSuffix}" 走对应 registry
+                    let proxyAddr = '';
+                    if (domainSuffix) {
+                        proxyAddr = isDefault ? domainSuffix : `${name}.${domainSuffix}`;
+                    }
+                    const proxyCell = proxyAddr
+                        ? `<code>${escapeHtml(proxyAddr)}</code>`
+                        : `<span class="dim" data-i18n="proxyAddrUnavailable">${I18n.t('proxyAddrUnavailable')}</span>`;
                     tbody.innerHTML += `
                         <tr>
                             <td><strong>${escapeHtml(displayName)}</strong>${badge}</td>
                             <td>${escapeHtml(url)}</td>
+                            <td>${proxyCell}</td>
                             <td>
                                 ${canDelete ? `<button class="btn btn-danger" data-registry="${escapeHtml(name)}" onclick="deleteRegistry(this.dataset.registry)">${I18n.t('delete')}</button>` : ''}
                             </td>
@@ -2331,6 +2345,7 @@
                         <td><input type="text" id="new-registry-name" data-i18n-placeholder="registryName" placeholder="${I18n.t('registryName')}" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--foreground);"></td>
                         <td><input type="text" id="new-registry-url" placeholder="https://example.com" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--foreground);"></td>
                         <td><button class="btn btn-primary" onclick="addRegistry()">${I18n.t('add')}</button></td>
+                        <td></td>
                     </tr>
                 `;
 
