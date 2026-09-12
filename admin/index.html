@@ -1857,10 +1857,12 @@
                     restartInProgress: '正在重启…',
                     restartWaiting: '等待服务恢复…',
                     restartWaitDownloads: '检测到 {n} 个下载任务，等待结束后将自动重启…',
+                    restartWaitQuiet: '下载已结束，静默等待后自动重启…',
                     restartWaitElapsed: '已等待 {s} 秒',
                     restartCancel: '取消重启',
                     restartCanceled: '已取消重启，服务继续正常运行',
                     restartCancelFailed: '取消失败，重启可能已进入最后阶段',
+                    restartFailed: '重启失败：{e}',
                     restartDone: '服务已重启，请重新登录',
                     restartTimeout: '等待服务恢复超时，请检查服务日志或手动重启',
                     restartUnsupported: '当前平台不支持从 Web 端重启，请手动重启服务',
@@ -1943,6 +1945,8 @@
                     addRegistry: 'Add Registry',
                     deleteConfirm: 'Confirm delete this registry?',
                     registryConfig: 'Registry Mapping',
+                    proxyAddress: 'Proxy Address',
+                    proxyAddrUnavailable: 'Domain suffix not set',
                     operation: 'Operation',
 
                     // Service Config
@@ -2089,10 +2093,12 @@
                     restartInProgress: 'Restarting…',
                     restartWaiting: 'Waiting for the service to come back…',
                     restartWaitDownloads: '{n} download(s) in progress, restart will start automatically once they finish…',
+                    restartWaitQuiet: 'Downloads finished, waiting for the quiet period…',
                     restartWaitElapsed: 'waited {s}s',
                     restartCancel: 'Cancel restart',
                     restartCanceled: 'Restart canceled, service keeps running',
                     restartCancelFailed: 'Cancel failed, the restart may have entered its final phase',
+                    restartFailed: 'Restart failed: {e}',
                     restartDone: 'Service restarted, please sign in again',
                     restartTimeout: 'Timed out waiting for the service; check the logs or restart manually',
                     restartUnsupported: 'This platform cannot restart in place from the web UI, please restart the service manually',
@@ -2357,8 +2363,8 @@
                     <tr style="background: var(--background-secondary);">
                         <td><input type="text" id="new-registry-name" data-i18n-placeholder="registryName" placeholder="${I18n.t('registryName')}" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--foreground);"></td>
                         <td><input type="text" id="new-registry-url" placeholder="https://example.com" style="width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card); color: var(--foreground);"></td>
-                        <td><button class="btn btn-primary" onclick="addRegistry()">${I18n.t('add')}</button></td>
                         <td></td>
+                        <td><button class="btn btn-primary" onclick="addRegistry()">${I18n.t('add')}</button></td>
                     </tr>
                 `;
 
@@ -3305,6 +3311,9 @@
             const cancelBtn = document.getElementById('restart-cancel-btn');
             if (cancelBtn) {
                 cancelBtn.style.display = info.waitingDownloads ? 'inline-block' : 'none';
+                // 每次重新显示都要复位 disabled：取消成功后按钮是被禁用的，
+                // 不复位的话下一次等待时按钮看得到却点不动
+                cancelBtn.disabled = false;
             }
 
             const btn = document.getElementById('restart-btn');
@@ -3367,7 +3376,11 @@
 
         // 重启等待期间的状态文案（服务端在等在途下载结束时返回 waitingDownloads）
         function restartWaitText(info) {
-            let text = I18n.t('restartWaitDownloads').replace('{n}', info.activeDownloads || 0);
+            const n = info.activeDownloads || 0;
+            // 下载清零后还要静默一段时间，此时说"0 个下载任务"会让人困惑
+            let text = n > 0
+                ? I18n.t('restartWaitDownloads').replace('{n}', n)
+                : I18n.t('restartWaitQuiet');
             if (info.waitElapsed) {
                 text += ' · ' + I18n.t('restartWaitElapsed').replace('{s}', Math.floor(info.waitElapsed));
             }
@@ -3420,9 +3433,11 @@
                         setTimeout(() => location.reload(), 2000);
                         return;
                     }
-                    // 进程没被替换、也不再处于重启中 → 等待阶段被取消了
+                    // 进程没被替换、也不再处于重启中：等待被取消，或重启已失败
                     if (!info.restarting) {
-                        showRestartStatus(I18n.t('restartCanceled'), 'info');
+                        showRestartStatus(info.lastError
+                            ? I18n.t('restartFailed').replace('{e}', info.lastError)
+                            : I18n.t('restartCanceled'), info.lastError ? 'error' : 'info');
                         return;
                     }
                 }

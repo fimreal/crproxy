@@ -237,13 +237,15 @@ type restartInfoView struct {
 	ActiveDownloads  int     `json:"activeDownloads"`
 	WaitingDownloads bool    `json:"waitingDownloads"`
 	WaitElapsed      float64 `json:"waitElapsed,omitempty"`
+	// 上一次重启失败的原因（预检失败等），供前端区分「失败」与「取消」
+	LastError string `json:"lastError,omitempty"`
 }
 
 // processStartAt 记录本进程的启动时间（供 uptime 展示与重启验证）
 var processStartAt = time.Now()
 
 func restartInfo() restartInfoView {
-	requested, _ := restartState.snapshot()
+	requested, errMsg := restartState.snapshot()
 	pending, err := isRestartPending()
 	if err != nil {
 		pending = false
@@ -262,6 +264,7 @@ func restartInfo() restartInfoView {
 		UpdateRunning:   progress.Running,
 		Restarting:      requested,
 		ActiveDownloads: restartActiveDownloadsFn(),
+		LastError:       errMsg,
 	}
 	if waiting, start, _ := restartState.waitSnapshot(); waiting {
 		view.WaitingDownloads = true
