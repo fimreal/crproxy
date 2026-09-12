@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -290,6 +291,10 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 		adminAPI.POST("/update", func(c *gin.Context) {
 			latestVersion, err := performUpdate()
 			if err != nil {
+				if errors.Is(err, ErrUpdateInProgress) {
+					c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+					return
+				}
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
@@ -306,6 +311,41 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 				"currentVersion": version,
 				"newVersion":     latestVersion,
 			})
+		})
+
+		// 更新进度（更新过程中前端轮询这里显示进度条）
+		adminAPI.GET("/update/progress", func(c *gin.Context) {
+			c.JSON(http.StatusOK, updateProgress.snapshot())
+		})
+
+		// 运行环境与重启能力（重启 tab 使用）
+		adminAPI.GET("/restart/info", func(c *gin.Context) {
+			c.JSON(http.StatusOK, restartInfo())
+		})
+
+		// 重启服务：先回包，再优雅关闭并原地 exec（保持 PID 不变）
+		adminAPI.POST("/restart", func(c *gin.Context) {
+			if !restartSupported {
+				c.JSON(http.StatusConflict, gin.H{"error": "in-place restart is not supported on this platform"})
+				return
+			}
+			if progress := updateProgress.snapshot(); progress.Running {
+				c.JSON(http.StatusConflict, gin.H{"error": ErrUpdateInProgress.Error()})
+				return
+			}
+			if !requestRestart() {
+				c.JSON(http.StatusConflict, gin.H{"error": "a restart is already in progress"})
+				return
+			}
+
+			slog.Info("restart requested via admin api", "client_ip", c.ClientIP(), "pid", os.Getpid())
+			// 先把响应发出去，重启在后台延迟执行（见 performRestart）
+			c.JSON(http.StatusOK, gin.H{
+				"restarting": true,
+				"method":     restartMethodName,
+				"pid":        os.Getpid(),
+			})
+			go performRestart()
 		})
 
 		// 重载配置

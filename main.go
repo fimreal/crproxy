@@ -4,7 +4,9 @@
 package main
 
 import (
+	"context"
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -223,16 +225,35 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", adminHTML)
 	})
 
+	// 显式持有 http.Server：在线重启与 SIGTERM 都需要先优雅关闭再退出/替换进程
+	srv := &http.Server{Addr: listen, Handler: r}
+
+	saveStats := func(reason string) {
+		if StatsDir == "" {
+			return
+		}
+		slog.Info("saving stats before "+reason+"...", "stats_dir", StatsDir)
+		if err := statsCollector.SaveToFile(); err != nil {
+			slog.Error("failed to save stats", "error", err)
+		}
+	}
+
+	// 供「在线重启」复用：保存统计 → 停止接收新请求 → 等待在途请求结束
+	restartShutdownFn = func(ctx context.Context) error {
+		saveStats("restart")
+		return srv.Shutdown(ctx)
+	}
+
 	// 优雅关闭：保存统计数据
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
-		if StatsDir != "" {
-			slog.Info("saving stats before shutdown...")
-			if err := statsCollector.SaveToFile(); err != nil {
-				slog.Error("failed to save stats", "error", err)
-			}
+		saveStats("shutdown")
+		ctx, cancel := context.WithTimeout(context.Background(), restartDrainTimeout)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			slog.Warn("graceful shutdown timed out", "error", err)
 		}
 		os.Exit(0)
 	}()
@@ -255,8 +276,16 @@ func main() {
 	} else {
 		slog.Warn("domain-suffix is not set, using default registry as the solo upstream")
 	}
-	if err := r.Run(listen); err != nil {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
+	}
+
+	// 走到这里说明 HTTP 服务已被关闭。如果是「在线重启」关的，
+	// 那么新映像即将（或已经）通过 exec 接管同一个 PID，本进程绝不能退出——
+	// 退出会让 systemd 拆掉 cgroup、或让容器认为主进程结束。
+	if requested, errMsg := restartState.snapshot(); requested {
+		slog.Info("listener closed for in-place restart, waiting for exec to take over", "last_error", errMsg)
+		select {}
 	}
 }

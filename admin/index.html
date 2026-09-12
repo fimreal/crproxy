@@ -727,6 +727,54 @@
             opacity: 0.6;
         }
 
+        .update-progress-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--foreground-muted);
+        }
+
+        .update-error {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border: 1px solid var(--danger);
+            border-radius: var(--radius-sm);
+            background: var(--danger-light, transparent);
+            color: var(--danger);
+            font-size: 13px;
+            white-space: pre-line;
+        }
+
+        .runtime-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 12px;
+        }
+
+        .stat-value-sm {
+            margin-top: 4px;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--foreground);
+        }
+
+        .runtime-hint {
+            margin: 0 0 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--foreground-muted);
+        }
+
+        .restart-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
         .progress-label {
             margin-top: 3px;
             font-size: 11px;
@@ -1450,6 +1498,48 @@
                             <span data-i18n="updateToLatest">更新到最新版本</span>
                         </button>
                     </div>
+                    <div id="update-progress" style="display: none; margin-top: 16px;">
+                        <div class="progress-track"><div id="update-progress-fill" class="progress-fill" style="width: 0%"></div></div>
+                        <div class="update-progress-meta">
+                            <span id="update-stage"></span>
+                            <span id="update-bytes"></span>
+                        </div>
+                    </div>
+                    <div id="update-error" class="update-error" style="display: none;"></div>
+                </div>
+
+                <div class="card" id="restart-card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 4v6h-6"></path>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            <span data-i18n="runtimeEnv">运行环境</span>
+                        </h2>
+                    </div>
+                    <div class="runtime-grid">
+                        <div class="runtime-item">
+                            <div class="stat-label" data-i18n="runtimeKind">部署方式</div>
+                            <div id="runtime-kind" class="stat-value-sm">-</div>
+                        </div>
+                        <div class="runtime-item">
+                            <div class="stat-label" data-i18n="runtimeProcess">进程</div>
+                            <div id="runtime-process" class="stat-value-sm">-</div>
+                        </div>
+                    </div>
+                    <p id="runtime-hint" class="runtime-hint"></p>
+                    <div class="restart-actions">
+                        <button id="restart-btn" class="btn" onclick="doRestart()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 4v6h-6"></path>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                            <span id="restart-btn-label" data-i18n="restartService">重启服务</span>
+                        </button>
+                        <span id="restart-pending" class="tag running" style="display: none;" data-i18n="restartPendingTag">有新版本待生效</span>
+                    </div>
+                    <div id="restart-status" class="update-error" style="display: none;"></div>
                 </div>
             </div>
         </div>
@@ -1729,6 +1819,41 @@
                     updating: '更新中...',
                     alreadyLatestVersion: '已经是最新版本',
                     updateFailed: '更新失败',
+                    updateStageChecking: '正在检查更新…',
+                    updateStageDownloading: '正在下载新版本…',
+                    updateStageVerifying: '正在校验下载的文件…',
+                    updateStageBackingUp: '正在备份当前版本…',
+                    updateStageReplacing: '正在替换二进制文件…',
+                    updateStageDone: '更新完成，请重启服务',
+                    updateStageFailed: '更新失败',
+                    updateStageUnknown: '处理中…',
+                    runtimeEnv: '运行环境',
+                    runtimeKind: '部署方式',
+                    runtimeProcess: '进程',
+                    restartService: '重启服务',
+                    restartServiceApply: '重启并生效',
+                    restartPendingTag: '有新版本待生效',
+                    restartKindKubernetes: 'Kubernetes Pod',
+                    restartKindDocker: 'Docker 容器',
+                    restartKindSystemd: 'systemd 服务',
+                    restartKindLaunchd: 'launchd 服务',
+                    restartKindSupervisor: 'supervisor 托管进程',
+                    restartKindStandalone: '独立进程（无进程管理器）',
+                    restartKindUnknown: '未识别的环境',
+                    restartHintKubernetes: '原地 exec 重启：PID 不变、Pod 不会重建；但二进制若来自镜像层，Pod 重建后会回到旧版本，长期更新请改镜像并滚动发布。',
+                    restartHintDocker: '原地 exec 重启：PID 不变；二进制若来自镜像层，容器重建后会回到旧版本，长期更新请更新镜像。',
+                    restartHintSystemd: '原地 exec 同一个 PID，systemd 视为同一次启动，不会触发 Restart= 策略。',
+                    restartHintLaunchd: '原地 exec 同一个 PID，launchd 视为同一次启动。',
+                    restartHintSupervisor: '原地 exec 同一个 PID，supervisor 不会误判为崩溃。',
+                    restartHintStandalone: '未检测到进程管理器：原地 exec 重启，无需手动拉起。',
+                    restartHintUnknown: '原地 exec 重启，PID 保持不变。',
+                    restartConfirm: '重启会先停止接收新请求并等待在途请求结束（最多 5 秒），期间服务短暂不可用。确定继续吗？',
+                    restartInProgress: '正在重启…',
+                    restartWaiting: '等待服务恢复…',
+                    restartDone: '服务已重启，请重新登录',
+                    restartTimeout: '等待服务恢复超时，请检查服务日志或手动重启',
+                    restartUnsupported: '当前平台不支持从 Web 端重启，请手动重启服务',
+                    restartBlockedByUpdate: '有更新正在下载，请等待完成后再重启',
 
                     // 确认对话框
                     confirmClearCacheTitle: '确认清空缓存？',
@@ -1921,6 +2046,41 @@
                     updating: 'Updating...',
                     alreadyLatestVersion: 'Already on latest version',
                     updateFailed: 'Update failed',
+                    updateStageChecking: 'Checking for updates…',
+                    updateStageDownloading: 'Downloading new version…',
+                    updateStageVerifying: 'Verifying the downloaded file…',
+                    updateStageBackingUp: 'Backing up current binary…',
+                    updateStageReplacing: 'Replacing the binary…',
+                    updateStageDone: 'Update complete, restart required',
+                    updateStageFailed: 'Update failed',
+                    updateStageUnknown: 'Working…',
+                    runtimeEnv: 'Runtime',
+                    runtimeKind: 'Deployment',
+                    runtimeProcess: 'Process',
+                    restartService: 'Restart service',
+                    restartServiceApply: 'Restart to apply',
+                    restartPendingTag: 'New version pending',
+                    restartKindKubernetes: 'Kubernetes pod',
+                    restartKindDocker: 'Docker container',
+                    restartKindSystemd: 'systemd service',
+                    restartKindLaunchd: 'launchd service',
+                    restartKindSupervisor: 'supervisor process',
+                    restartKindStandalone: 'Standalone process',
+                    restartKindUnknown: 'Unrecognized environment',
+                    restartHintKubernetes: 'Restarts in place via exec: same PID, the pod is not recreated. If the binary comes from the image layer it reverts on pod recreation - update the image and roll out for long-term upgrades.',
+                    restartHintDocker: 'Restarts in place via exec: same PID. If the binary comes from the image layer it reverts when the container is recreated - update the image for long-term upgrades.',
+                    restartHintSystemd: 'Restarts in place via exec with the same PID, so systemd treats it as the same start and no Restart= policy fires.',
+                    restartHintLaunchd: 'Restarts in place via exec with the same PID, so launchd treats it as the same start.',
+                    restartHintSupervisor: 'Restarts in place via exec with the same PID, so supervisor does not treat it as a crash.',
+                    restartHintStandalone: 'No process manager detected: restarts in place via exec, nothing to bring it back manually.',
+                    restartHintUnknown: 'Restarts in place via exec, keeping the same PID.',
+                    restartConfirm: 'Restarting stops accepting new requests and waits for in-flight ones to finish (up to 5s), so the service is briefly unavailable. Continue?',
+                    restartInProgress: 'Restarting…',
+                    restartWaiting: 'Waiting for the service to come back…',
+                    restartDone: 'Service restarted, please sign in again',
+                    restartTimeout: 'Timed out waiting for the service; check the logs or restart manually',
+                    restartUnsupported: 'This platform cannot restart in place from the web UI, please restart the service manually',
+                    restartBlockedByUpdate: 'An update is downloading, wait for it to finish before restarting',
 
                     // Confirm Dialog
                     confirmClearCacheTitle: 'Confirm Clear Cache?',
@@ -2983,9 +3143,272 @@
             }, 3000);
         }
 
+        // ==================== 更新进度 ====================
+        // 下载阶段可能持续数分钟，而 POST /admin/api/update 要等全部结束才返回，
+        // 所以进度单独走 /admin/api/update/progress 轮询，刷新页面也不会丢。
+        let updatePollTimer = null;
+        let updateInFlight = false;
+        const UPDATE_STAGE_KEYS = {
+            checking: 'updateStageChecking',
+            downloading: 'updateStageDownloading',
+            verifying: 'updateStageVerifying',
+            backing_up: 'updateStageBackingUp',
+            replacing: 'updateStageReplacing',
+            done: 'updateStageDone',
+            failed: 'updateStageFailed',
+        };
+
+        function renderUpdateProgress(p) {
+            const box = document.getElementById('update-progress');
+            if (!box) return;
+            if (!p || !p.stage || p.stage === 'idle') {
+                // 刚点下更新、服务端还没登记任务时，先按「检查中」显示，
+                // 否则进度条会闪一下又消失
+                if (!updateInFlight) {
+                    box.style.display = 'none';
+                    return;
+                }
+                p = {stage: 'checking'};
+            }
+            box.style.display = 'block';
+
+            const pct = p.total > 0 ? Math.max(0, Math.min(100, p.percent || 0)) : 0;
+            const fill = document.getElementById('update-progress-fill');
+            fill.style.width = pct.toFixed(1) + '%';
+            fill.classList.toggle('cached', p.stage === 'done');
+
+            document.getElementById('update-stage').textContent =
+                I18n.t(UPDATE_STAGE_KEYS[p.stage] || 'updateStageUnknown');
+
+            const parts = [];
+            if (p.stage === 'downloading' || p.stage === 'done') {
+                if (p.total > 0) {
+                    parts.push(`${formatBytes(p.downloaded)} / ${formatBytes(p.total)} · ${pct.toFixed(1)}%`);
+                } else if (p.downloaded > 0) {
+                    parts.push(formatBytes(p.downloaded));
+                }
+                if (p.speed > 0) parts.push(formatRate(p.speed));
+            }
+            if (p.elapsed > 0) parts.push(formatDuration(p.elapsed));
+            document.getElementById('update-bytes').textContent = parts.join(' · ');
+        }
+
+        function showUpdateError(message) {
+            const box = document.getElementById('update-error');
+            if (!box) return;
+            if (!message) {
+                box.style.display = 'none';
+                box.textContent = '';
+                return;
+            }
+            box.textContent = message;
+            box.style.display = 'block';
+        }
+
+        async function pollUpdateProgress() {
+            try {
+                const response = await fetch('/admin/api/update/progress', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                if (response.status === 401) {
+                    logout();
+                    return null;
+                }
+                const progress = await response.json();
+                renderUpdateProgress(progress);
+                return progress;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function startUpdatePolling() {
+            if (updatePollTimer) return;
+            updatePollTimer = setInterval(async () => {
+                const progress = await pollUpdateProgress();
+                if (progress && !progress.running) stopUpdatePolling();
+            }, 700);
+        }
+
+        function stopUpdatePolling() {
+            if (updatePollTimer) {
+                clearInterval(updatePollTimer);
+                updatePollTimer = null;
+            }
+        }
+
+        // ==================== 运行环境与重启 ====================
+        const RESTART_KIND_KEYS = {
+            kubernetes: 'restartKindKubernetes',
+            docker: 'restartKindDocker',
+            systemd: 'restartKindSystemd',
+            launchd: 'restartKindLaunchd',
+            supervisor: 'restartKindSupervisor',
+            standalone: 'restartKindStandalone',
+        };
+        const RESTART_HINT_KEYS = {
+            kubernetes: 'restartHintKubernetes',
+            docker: 'restartHintDocker',
+            systemd: 'restartHintSystemd',
+            launchd: 'restartHintLaunchd',
+            supervisor: 'restartHintSupervisor',
+            standalone: 'restartHintStandalone',
+        };
+
+        function renderRestartInfo(info) {
+            const kindEl = document.getElementById('runtime-kind');
+            if (!kindEl) return;
+            if (!info) {
+                kindEl.textContent = '-';
+                return;
+            }
+            const env = info.environment || {};
+            kindEl.textContent = I18n.t(RESTART_KIND_KEYS[env.kind] || 'restartKindUnknown');
+            document.getElementById('runtime-hint').textContent =
+                I18n.t(RESTART_HINT_KEYS[env.kind] || 'restartHintUnknown');
+
+            document.getElementById('runtime-process').textContent =
+                `PID ${info.pid} · ${I18n.t('uptime')} ${formatUptimeShort(info.uptime)} · ${I18n.t('currentVersion')} ${info.version || '-'}`;
+
+            const pending = document.getElementById('restart-pending');
+            pending.style.display = info.restartPending ? 'inline-block' : 'none';
+
+            const btn = document.getElementById('restart-btn');
+            const label = document.getElementById('restart-btn-label');
+            const canRestart = info.supported && !info.updateRunning && !info.restarting;
+            btn.disabled = !canRestart;
+            btn.title = '';
+            if (label) {
+                // 有待生效的新版本时，按钮文案强调"重启并生效"
+                label.textContent = I18n.t(info.restartPending ? 'restartServiceApply' : 'restartService');
+            }
+            if (!info.supported) {
+                btn.title = I18n.t('restartUnsupported');
+            } else if (info.updateRunning) {
+                btn.title = I18n.t('restartBlockedByUpdate');
+            }
+        }
+
+        async function loadRestartInfo() {
+            try {
+                const response = await fetch('/admin/api/restart/info', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                if (response.status === 401) {
+                    logout();
+                    return null;
+                }
+                const info = await response.json();
+                renderRestartInfo(info);
+                return info;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function showRestartStatus(text, kind) {
+            const box = document.getElementById('restart-status');
+            if (!box) return;
+            if (!text) {
+                box.style.display = 'none';
+                box.textContent = '';
+                return;
+            }
+            box.style.display = 'block';
+            box.textContent = text;
+            if (kind === 'error') {
+                box.style.borderColor = 'var(--danger)';
+                box.style.color = 'var(--danger)';
+            } else if (kind === 'done') {
+                box.style.borderColor = 'var(--success)';
+                box.style.color = 'var(--success)';
+            } else {
+                box.style.borderColor = 'var(--card-border)';
+                box.style.color = 'var(--foreground-muted)';
+            }
+        }
+
+        // 重启后确认服务恢复。不能靠"先探到失败、再探到成功"——原地 exec 的
+        // 停机窗口只有几十毫秒，轮询几乎必然错过失败。改用确定性判据：
+        //   a) 进程启动时间（startedAt）变了 → 已经是新进程；
+        //   b) 旧 token 失效（401）→ token 在内存里，进程被替换后必然失效。
+        async function waitForServiceBack(startedAtBefore) {
+            showRestartStatus(I18n.t('restartWaiting'), 'info');
+            const deadline = Date.now() + 90000;
+            while (Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                let response = null;
+                try {
+                    response = await fetch('/admin/api/restart/info', {
+                        cache: 'no-store',
+                        headers: {'Authorization': `Bearer ${token}`}
+                    });
+                } catch (error) {
+                    // 连接被拒/断开：进程正在被替换，继续等
+                    continue;
+                }
+                if (response.status === 401) {
+                    showRestartStatus(I18n.t('restartDone'), 'done');
+                    setTimeout(() => location.reload(), 2000);
+                    return;
+                }
+                if (response.ok) {
+                    let info = null;
+                    try {
+                        info = await response.json();
+                    } catch (error) {
+                        continue;
+                    }
+                    if (startedAtBefore && info.startedAt && info.startedAt !== startedAtBefore) {
+                        showRestartStatus(I18n.t('restartDone'), 'done');
+                        setTimeout(() => location.reload(), 2000);
+                        return;
+                    }
+                }
+            }
+            showRestartStatus(I18n.t('restartTimeout'), 'error');
+        }
+
+        async function doRestart() {
+            const info = await loadRestartInfo();
+            if (info && !info.supported) {
+                showToast(I18n.t('restartUnsupported'), 'error');
+                return;
+            }
+            if (info && info.updateRunning) {
+                showToast(I18n.t('restartBlockedByUpdate'), 'error');
+                return;
+            }
+            if (!confirm(I18n.t('restartConfirm'))) return;
+
+            const startedAtBefore = info ? info.startedAt : 0;
+            showRestartStatus(I18n.t('restartInProgress'), 'info');
+            const btn = document.getElementById('restart-btn');
+            btn.disabled = true;
+            try {
+                await fetch('/admin/api/restart', {
+                    method: 'POST',
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+            } catch (error) {
+                // 进程被替换时连接可能直接断开，这是预期内的
+            }
+            await waitForServiceBack(startedAtBefore);
+            btn.disabled = false;
+        }
+
         // 检查更新
         async function checkUpdate() {
             try {
+                // 后台可能正在更新（比如刚刷新过页面），先把进度同步出来
+                const progress = await pollUpdateProgress();
+                if (progress && progress.running) {
+                    startUpdatePolling();
+                } else if (progress && progress.stage === 'failed' && progress.error) {
+                    showUpdateError(progress.error);
+                }
+                loadRestartInfo();
+
                 const response = await fetch('/admin/api/update/check', {
                     headers: {'Authorization': `Bearer ${token}`}
                 });
@@ -3054,35 +3477,53 @@
         // 执行更新
         async function doUpdate() {
             const btn = document.getElementById('update-btn');
+            const resetBtn = () => {
+                btn.disabled = false;
+                btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg> <span data-i18n="updateToLatest">${I18n.t('updateToLatest')}</span>`;
+            };
+
             btn.disabled = true;
             btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> ${I18n.t('updating')}`;
+            showUpdateError('');
+            // 下载可能持续数分钟，这里不等 POST 返回，改为边跑边轮询进度
+            updateInFlight = true;
+            renderUpdateProgress({stage: 'checking'});
+            startUpdatePolling();
 
+            let alreadyLatest = false;
             try {
                 const response = await fetch('/admin/api/update', {
                     method: 'POST',
                     headers: {'Authorization': `Bearer ${token}`}
                 });
-
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
 
                 if (response.ok) {
                     if (data.newVersion) {
                         showToast(`${I18n.t('updateSuccess')}! ${I18n.t('newVersion')}: ${data.newVersion}`, 'success');
-                        setTimeout(checkUpdate, 500);
                     } else {
                         showToast(I18n.t('alreadyLatestVersion'), 'success');
-                        btn.disabled = false;
-                        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg> <span data-i18n="updateToLatest">${I18n.t('updateToLatest')}</span>`;
+                        alreadyLatest = true;
                     }
                 } else {
-                    showToast(data.error || I18n.t('updateFailed'), 'error');
-                    btn.disabled = false;
-                    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg> <span>${I18n.t('updateToLatest')}</span>`;
+                    const message = data.error || I18n.t('updateFailed');
+                    showToast(message, 'error');
+                    showUpdateError(message);
                 }
             } catch (error) {
-                showToast(I18n.t('updateFailed') + ': ' + error.message, 'error');
-                btn.disabled = false;
-                btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg> <span>${I18n.t('updateToLatest')}</span>`;
+                const message = I18n.t('updateFailed') + ': ' + error.message;
+                showToast(message, 'error');
+                showUpdateError(message);
+            } finally {
+                resetBtn();
+                updateInFlight = false;
+                await pollUpdateProgress();
+                stopUpdatePolling();
+                if (alreadyLatest) {
+                    // 已是最新版本，本轮没有实际下载，不留进度条
+                    renderUpdateProgress({stage: 'idle'});
+                }
+                setTimeout(checkUpdate, 500);
             }
         }
     </script>
