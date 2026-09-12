@@ -135,6 +135,10 @@ const (
 	// liveAggTTL 聚合条目在「无活跃请求」前提下的保留时长。
 	// 没有它的话，表一旦满了新客户端/新镜像就永远进不来（旧条目只进不出）。
 	liveAggTTL = 10 * time.Minute
+	// downloadStaleIdle 判定 blob 任务「假死」的空闲时长：这么久一个字节都没
+	// 流动过，基本可以确定客户端已经消失（TCP 半开），这种任务永远不会自己
+	// 结束，不能因为它把重启永久挂住。真实下载再慢也会持续有字节流动。
+	downloadStaleIdle = 5 * time.Minute
 )
 
 // liveTask 一次正在进行（或刚结束）的代理请求。
@@ -162,10 +166,15 @@ type liveTask struct {
 	total atomic.Int64
 	sent  atomic.Int64
 	recv  atomic.Int64
+
+	// lastMove 最后一次有字节流动（收或发）的时间，UnixNano。
+	// 用来识别假死任务：它们一直挂在 active 里，但早已没有流量。
+	lastMove atomic.Int64
 }
 
 func (t *liveTask) addSent(n int64) {
 	t.sent.Add(n)
+	t.lastMove.Store(time.Now().UnixNano())
 	liveRate.add(n, 0)
 	// 会话总量也实时累加，否则大文件传输期间会出现「速率很高、总量为 0」
 	live.totalSent.Add(n)
@@ -173,6 +182,7 @@ func (t *liveTask) addSent(n int64) {
 
 func (t *liveTask) addRecv(n int64) {
 	t.recv.Add(n)
+	t.lastMove.Store(time.Now().UnixNano())
 	liveRate.add(0, n)
 	live.totalRecv.Add(n)
 }
@@ -384,6 +394,7 @@ func liveTaskID(c *gin.Context) string {
 func (lt *LiveTracker) Begin(c *gin.Context) *liveTask {
 	path := c.Request.URL.Path
 	kind, reference := classifyLiveRequest(path)
+	now := time.Now()
 
 	image := parseImageName(path)
 	if image == "" && kind == "token" {
@@ -399,8 +410,10 @@ func (lt *LiveTracker) Begin(c *gin.Context) *liveTask {
 		Image:      image,
 		Kind:       kind,
 		Reference:  reference,
-		StartAt:    time.Now(),
+		StartAt:    now,
 	}
+	// 起点算作一次"流动"，否则请求刚进来、上游还没响应时会被误判成假死
+	t.lastMove.Store(now.UnixNano())
 
 	lt.mu.Lock()
 	lt.active[t.ID] = t
@@ -624,14 +637,26 @@ func (lt *LiveTracker) Snapshot() liveSnapshot {
 // ActiveDownloads 返回当前仍在进行的 blob 下载任务数。
 // 重启前的等待逻辑用它判断「客户端还在拉镜像」：manifest/token 等小请求
 // 生命周期极短，不计入，否则重启几乎永远等不到清零。
+//
+// 假死任务不算数（见 downloadStaleIdle）。空闲超时（-idle-timeout）负责关掉
+// 这些连接，但它只在下一次 I/O 时生效：如果 handler 正卡在读上游、
+// 客户端连接上没有任何读写，deadline 不会被触发，任务就会一直留在这里。
+// 所以计数这层再兜一次底，重启才真正不可能被挂死。
 func (lt *LiveTracker) ActiveDownloads() int {
 	lt.mu.RLock()
 	defer lt.mu.RUnlock()
+	cutoff := time.Now().Add(-downloadStaleIdle).UnixNano()
 	n := 0
 	for _, t := range lt.active {
-		if t.Kind == "blob" {
-			n++
+		if t.Kind != "blob" {
+			continue
 		}
+		// 假死任务不算数：它挂在 active 里永远不会结束，但也没人在真下载，
+		// 算进去会让重启永久等待（客户端消失时没人会来让它 Finish）。
+		if t.lastMove.Load() < cutoff {
+			continue
+		}
+		n++
 	}
 	return n
 }

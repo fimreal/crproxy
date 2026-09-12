@@ -9,8 +9,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +45,7 @@ func main() {
 	flag.StringVar(&defaultRegistry, "default-registry", "", "default registry URL, e.g. https://registry-1.docker.io")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.StringVar(&registryMapPath, "registry-map", "", "registry map file path (default: use built-in)")
+	flag.DurationVar(&idleTimeout, "idle-timeout", 5*time.Minute, "close connections carrying no bytes for this long, e.g. 5m, 30s; 0 disables")
 	flag.BoolVar(&help, "help", false, "show help")
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.Parse()
@@ -130,7 +133,17 @@ func main() {
 	} else {
 		slog.Info("running in single-upstream mode")
 	}
-	if err := r.Run(listen); err != nil {
+	// 不用 r.Run()：套一层空闲超时，免得假死的下载连接永远挂着
+	ln, err := net.Listen("tcp", listen)
+	if err != nil {
+		slog.Error("failed to listen", "address", listen, "error", err)
+		os.Exit(1)
+	}
+	if idleTimeout > 0 {
+		slog.Info("idle connection timeout enabled", "timeout", idleTimeout)
+	}
+	srv := &http.Server{Addr: listen, Handler: r}
+	if err := srv.Serve(newIdleTimeoutListener(ln, idleTimeout)); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}

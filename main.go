@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -53,6 +54,7 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "show version")
 	flag.StringVar(&logLevelStr, "log-level", "info", "log level: debug, info, warn, error")
 	flag.StringVar(&configFile, "config-file", "", "configuration file path (default: ./crproxy-config.json)")
+	flag.DurationVar(&idleTimeout, "idle-timeout", 5*time.Minute, "close connections carrying no bytes for this long, e.g. 5m, 30s; 0 disables")
 	flag.BoolVar(&doUpdate, "update", false, "update to latest version from GitHub releases")
 	flag.Parse()
 
@@ -271,12 +273,21 @@ func main() {
 	}
 
 	slog.Info("crproxy listening", "address", listen)
+	if idleTimeout > 0 {
+		slog.Info("idle connection timeout enabled", "timeout", idleTimeout)
+	}
 	if DomainSuffix != "" {
 		slog.Info("domain-suffix configured", "suffix", DomainSuffix)
 	} else {
 		slog.Warn("domain-suffix is not set, using default registry as the solo upstream")
 	}
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	// 不用 srv.ListenAndServe()：套一层空闲超时，免得假死的下载连接永远占着在途任务
+	ln, err := net.Listen("tcp", listen)
+	if err != nil {
+		slog.Error("failed to listen", "address", listen, "error", err)
+		os.Exit(1)
+	}
+	if err := srv.Serve(newIdleTimeoutListener(ln, idleTimeout)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}

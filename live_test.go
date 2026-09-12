@@ -336,3 +336,23 @@ func TestRateMeterDecays(t *testing.T) {
 		t.Errorf("空闲超窗口后速率应归零: tx=%v rx=%v", tx, rx)
 	}
 }
+
+// 假死的 blob 任务（客户端消失、连接空闲超时尚未触发）不能计入在途下载：
+// 它永远不会自己结束，算进去会让重启前的等待永久卡住。
+func TestActiveDownloadsIgnoresStaleTasks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	lt := newLiveTracker()
+
+	live1 := lt.Begin(newTestContext("GET", "/v2/library/alpine/blobs/sha256:aaa", ""))
+	zombie := lt.Begin(newTestContext("GET", "/v2/library/alpine/blobs/sha256:bbb", ""))
+	if got := lt.ActiveDownloads(); got != 2 {
+		t.Fatalf("初始在途下载 = %d, want 2", got)
+	}
+
+	live1.addSent(1) // 还在传字节
+	zombie.lastMove.Store(time.Now().Add(-2 * downloadStaleIdle).UnixNano())
+
+	if got := lt.ActiveDownloads(); got != 1 {
+		t.Errorf("假死任务应被排除：在途下载 = %d, want 1", got)
+	}
+}
