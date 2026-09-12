@@ -149,6 +149,9 @@ func readFromCache(c *gin.Context) bool {
 	c.Header("X-Cache", "HIT")
 	c.Header("Content-Length", fmt.Sprintf("%d", blobInfo.Size()))
 
+	// 命中本地缓存时没有上游响应，需要单独告知总长度供进度显示使用
+	metricNoteTotal(c, blobInfo.Size())
+
 	// 打开 blob 文件进行流式传输
 	blobFile, err := os.Open(blobPath)
 	if err != nil {
@@ -341,6 +344,10 @@ func writeToCache(resp *http.Response) {
 		return
 	}
 
+	// 走到这里说明这是一个「本可命中缓存、但只能回源」的请求。
+	// 必须显式打上 MISS，否则命中率统计里未命中永远是 0。
+	resp.Header.Set("X-Cache", "MISS")
+
 	metaPath, blobPath := getCachePaths(digest)
 	tmpBlobPath := blobPath + tmpSuffix
 
@@ -373,7 +380,9 @@ func writeToCache(resp *http.Response) {
 	for k, v := range resp.Header {
 		if len(v) > 0 {
 			lowerKey := strings.ToLower(k)
-			if lowerKey != "connection" && lowerKey != "transfer-encoding" {
+			// x-cache 是本次回源的即时状态，属于响应头而非缓存内容，
+			// 写进元数据会在后续命中时留下一个假的 MISS
+			if lowerKey != "connection" && lowerKey != "transfer-encoding" && lowerKey != "x-cache" {
 				headers[k] = v[0]
 			}
 		}

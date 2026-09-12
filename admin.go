@@ -178,6 +178,11 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			c.JSON(http.StatusOK, stats)
 		})
 
+		// 实时状态快照（实时监控 tab 使用）
+		adminAPI.GET("/live", func(c *gin.Context) {
+			c.JSON(http.StatusOK, live.Snapshot())
+		})
+
 		// 获取缓存统计
 		adminAPI.GET("/cache/stats", func(c *gin.Context) {
 			if CacheDir == "" {

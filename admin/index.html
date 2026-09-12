@@ -540,6 +540,206 @@
             color: var(--foreground-muted);
         }
 
+        /* 实时监控 */
+        .live-pulse {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--foreground-muted);
+        }
+
+        .live-pulse i {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: live-pulse 2s infinite;
+        }
+
+        .live-pulse.idle i {
+            background: var(--foreground-muted);
+            animation: none;
+        }
+
+        @keyframes live-pulse {
+            0% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0.45); }
+            70% { box-shadow: 0 0 0 8px rgb(16 185 129 / 0); }
+            100% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0); }
+        }
+
+        .live-chart-wrap {
+            position: relative;
+            margin-top: 18px;
+            padding: 10px 12px 6px;
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            background: var(--background);
+        }
+
+        .live-chart-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 12px;
+            color: var(--foreground-muted);
+            margin-bottom: 6px;
+        }
+
+        .live-legend {
+            display: flex;
+            gap: 12px;
+        }
+
+        .live-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .live-legend b {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        .live-chart {
+            display: block;
+            width: 100%;
+            height: 120px;
+        }
+
+        .live-two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .live-two-col h3 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--foreground-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .live-scroll {
+            max-height: 380px;
+            overflow-y: auto;
+        }
+
+        .live-task-client {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.3;
+        }
+
+        .live-task-client small {
+            color: var(--foreground-muted);
+            font-size: 11px;
+        }
+
+        .live-empty {
+            padding: 20px;
+            text-align: center;
+            color: var(--foreground-muted);
+            font-size: 13px;
+        }
+
+        code,
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+            font-size: 12px;
+        }
+
+        .dim {
+            color: var(--foreground-muted);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.6;
+            white-space: nowrap;
+            background: var(--background-secondary);
+            color: var(--foreground-muted);
+            border: 1px solid var(--card-border);
+        }
+
+        .tag.hit,
+        .tag.running,
+        .tag.kind-blob {
+            background: var(--primary-muted);
+            color: #047857;
+            border-color: transparent;
+        }
+
+        .tag.miss {
+            background: var(--warning-light);
+            color: #b45309;
+            border-color: transparent;
+        }
+
+        .tag.bad {
+            background: var(--danger-light);
+            color: #b91c1c;
+            border-color: transparent;
+        }
+
+        [data-theme="dark"] .tag.hit,
+        [data-theme="dark"] .tag.running,
+        [data-theme="dark"] .tag.kind-blob {
+            color: #6ee7b7;
+        }
+
+        [data-theme="dark"] .tag.miss {
+            color: #fcd34d;
+        }
+
+        [data-theme="dark"] .tag.bad {
+            color: #fca5a5;
+        }
+
+        .progress-track {
+            height: 6px;
+            min-width: 96px;
+            border-radius: 999px;
+            background: var(--background-secondary);
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--primary);
+            transition: width 240ms linear;
+        }
+
+        .progress-fill.cached {
+            background: var(--success);
+            opacity: 0.6;
+        }
+
+        .progress-label {
+            margin-top: 3px;
+            font-size: 11px;
+            color: var(--foreground-muted);
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            .live-two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -965,6 +1165,12 @@
                     </svg>
                     <span data-i18n="statsTab">运行统计</span>
                 </button>
+                <button class="tab-btn" onclick="switchTab('live')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <span data-i18n="liveTab">实时监控</span>
+                </button>
                 <button class="tab-btn" onclick="switchTab('update')">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -1139,6 +1345,86 @@
                         </h2>
                     </div>
                     <div id="client-ip-stats" class="loading" data-i18n="noData">暂无数据</div>
+                </div>
+            </div>
+
+            <!-- 实时监控 -->
+            <div id="live-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                            </svg>
+                            <span data-i18n="liveOverview">实时状态</span>
+                        </h2>
+                        <span class="live-pulse" id="live-pulse">
+                            <i></i>
+                            <span id="live-pulse-text" data-i18n="livePolling">实时刷新中</span>
+                        </span>
+                    </div>
+                    <div class="stats-grid" id="live-summary"></div>
+
+                    <div class="live-chart-wrap">
+                        <div class="live-chart-head">
+                            <span><span data-i18n="liveRateChart">传输速率</span> · <span data-i18n="liveRateWindow">滑动窗口</span></span>
+                            <span class="live-legend">
+                                <span><b style="background: var(--primary);"></b><span data-i18n="txRate">上行</span></span>
+                                <span><b style="background: var(--warning);"></b><span data-i18n="rxRate">下行</span></span>
+                            </span>
+                        </div>
+                        <canvas id="live-chart" class="live-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <span data-i18n="liveActiveTasks">进行中的任务</span>
+                        </h2>
+                        <span class="badge" id="live-active-badge">0</span>
+                    </div>
+                    <div id="live-active"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 11 12 14 22 4"></polyline>
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                            </svg>
+                            <span data-i18n="liveRecentTasks">最近完成</span>
+                        </h2>
+                    </div>
+                    <div id="live-recent" class="live-scroll"></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                            <span data-i18n="liveSessionStats">会话统计</span>
+                        </h2>
+                    </div>
+                    <div class="live-two-col">
+                        <div>
+                            <h3 data-i18n="liveClients">客户端</h3>
+                            <div id="live-clients"></div>
+                        </div>
+                        <div>
+                            <h3 data-i18n="liveImages">镜像</h3>
+                            <div id="live-images" class="live-scroll"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1385,6 +1671,45 @@
                     cacheStatus: '缓存状态',
                     loadStatsFailed: '加载统计失败',
 
+                    // 实时监控
+                    liveTab: '实时监控',
+                    liveOverview: '实时状态',
+                    livePolling: '实时刷新中',
+                    liveIdle: '空闲',
+                    liveRateChart: '传输速率',
+                    liveRateWindow: '滑动窗口',
+                    txRate: '发送给客户端',
+                    rxRate: '从上游拉取',
+                    liveActiveTasks: '进行中的任务',
+                    liveRecentTasks: '最近完成',
+                    liveSessionStats: '会话统计',
+                    liveClients: '客户端',
+                    liveImages: '镜像',
+                    liveActiveCount: '活跃任务',
+                    liveCacheHitRate: '缓存命中率',
+                    liveSessionTraffic: '会话往返流量',
+                    liveTaskClient: '客户端',
+                    liveTaskImage: '镜像',
+                    liveTaskAction: '操作',
+                    liveTaskProgress: '进度',
+                    liveTaskSize: '大小',
+                    liveTaskSpeed: '速度',
+                    liveTaskElapsed: '耗时',
+                    liveTaskStatus: '状态',
+                    liveNoActive: '当前没有进行中的代理任务',
+                    liveNoRecent: '暂无已完成的任务',
+                    liveStatusRunning: '进行中',
+                    liveStatusAborted: '中断',
+                    liveUnknownSize: '大小未知',
+                    kindApi: 'API 探测',
+                    kindManifest: 'Manifest',
+                    kindBlob: '层下载',
+                    kindUpload: '层上传',
+                    kindToken: '鉴权',
+                    kindTaglist: '标签列表',
+                    kindOther: '其他',
+                    liveLoadFailed: '加载实时状态失败',
+
                     // 更新
                     currentVersion: '当前版本',
                     checkUpdate: '检查更新',
@@ -1519,6 +1844,7 @@
                     upstreamHost: 'Upstream Host',
                     imageName: 'Image Name',
                     requestCount: 'Requests',
+                    traffic: 'Traffic',
                     pullCount: 'Pulls',
                     trafficSent: 'Traffic Sent',
                     downloadTraffic: 'Download Traffic',
@@ -1536,6 +1862,45 @@
                     notEnabled: 'Not Enabled',
                     cacheStatus: 'Cache Status',
                     loadStatsFailed: 'Failed to load statistics',
+
+                    // Live Monitor
+                    liveTab: 'Live Monitor',
+                    liveOverview: 'Live Status',
+                    livePolling: 'Live',
+                    liveIdle: 'Idle',
+                    liveRateChart: 'Transfer Rate',
+                    liveRateWindow: 'sliding window',
+                    txRate: 'To Client',
+                    rxRate: 'From Upstream',
+                    liveActiveTasks: 'Active Tasks',
+                    liveRecentTasks: 'Recently Completed',
+                    liveSessionStats: 'Session Statistics',
+                    liveClients: 'Clients',
+                    liveImages: 'Images',
+                    liveActiveCount: 'Active Tasks',
+                    liveCacheHitRate: 'Cache Hit Rate',
+                    liveSessionTraffic: 'Session Traffic',
+                    liveTaskClient: 'Client',
+                    liveTaskImage: 'Image',
+                    liveTaskAction: 'Action',
+                    liveTaskProgress: 'Progress',
+                    liveTaskSize: 'Size',
+                    liveTaskSpeed: 'Speed',
+                    liveTaskElapsed: 'Elapsed',
+                    liveTaskStatus: 'Status',
+                    liveNoActive: 'No proxy task in progress',
+                    liveNoRecent: 'No completed task yet',
+                    liveStatusRunning: 'Running',
+                    liveStatusAborted: 'Aborted',
+                    liveUnknownSize: 'unknown size',
+                    kindApi: 'API Check',
+                    kindManifest: 'Manifest',
+                    kindBlob: 'Layer Download',
+                    kindUpload: 'Layer Upload',
+                    kindToken: 'Auth',
+                    kindTaglist: 'Tag List',
+                    kindOther: 'Other',
+                    liveLoadFailed: 'Failed to load live status',
 
                     // Update
                     currentVersion: 'Current Version',
@@ -1597,6 +1962,10 @@
                 // 重新加载配置以更新动态内容（表格中的按钮等）
                 if (document.getElementById('app').style.display === 'block') {
                     loadConfig();
+                    // 实时监控的内容是动态渲染的，需要按新语言重绘
+                    if (activeTab === 'live') {
+                        loadLive();
+                    }
                 }
             },
 
@@ -1709,14 +2078,31 @@
             }
         }
 
+        // 当前激活的标签页，用于只刷新可见标签页的数据
+        let activeTab = 'config';
+
         // 显示主应用
         function showApp() {
             document.getElementById('login-page').style.display = 'none';
             document.getElementById('app').style.display = 'block';
             loadConfig();
             loadStats();
-            // 自动刷新统计
-            setInterval(loadStats, 5000);
+            startPolling();
+        }
+
+        // 统一轮询：实时监控 1 秒一次，运行统计 5 秒一次，只刷新当前可见的标签页
+        let pollingStarted = false;
+        function startPolling() {
+            if (pollingStarted) return;
+            pollingStarted = true;
+            setInterval(() => {
+                if (document.hidden) return;
+                if (activeTab === 'live') loadLive();
+            }, 1000);
+            setInterval(() => {
+                if (document.hidden) return;
+                if (activeTab === 'stats') loadStats();
+            }, 5000);
         }
 
         // 退出登录
@@ -1728,6 +2114,7 @@
 
         // 切换标签
         function switchTab(tabName) {
+            activeTab = tabName;
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
@@ -1736,6 +2123,9 @@
 
             if (tabName === 'stats') {
                 loadStats();
+            }
+            if (tabName === 'live') {
+                loadLive();
             }
             if (tabName === 'update') {
                 checkUpdate();
@@ -1766,10 +2156,10 @@
                     const badge = isDefault ? '<span class="badge" style="background: var(--primary-muted); color: var(--primary-dark);">当前默认</span>' : '';
                     tbody.innerHTML += `
                         <tr>
-                            <td><strong>${displayName}</strong>${badge}</td>
-                            <td>${url}</td>
+                            <td><strong>${escapeHtml(displayName)}</strong>${badge}</td>
+                            <td>${escapeHtml(url)}</td>
                             <td>
-                                ${canDelete ? `<button class="btn btn-danger" onclick="deleteRegistry('${name}')">${I18n.t('delete')}</button>` : ''}
+                                ${canDelete ? `<button class="btn btn-danger" data-registry="${escapeHtml(name)}" onclick="deleteRegistry(this.dataset.registry)">${I18n.t('delete')}</button>` : ''}
                             </td>
                         </tr>
                     `;
@@ -1802,20 +2192,20 @@
                     for (const [name, url] of otherRegistries) {
                         const displayName = name === '-' ? '(未命名)' : name;
                         const selected = url === defaultRegistryUrl ? 'selected' : '';
-                        defaultRegistrySelect.innerHTML += `<option value="${name}" ${selected}>${displayName} (${url})</option>`;
+                        defaultRegistrySelect.innerHTML += `<option value="${escapeHtml(name)}" ${selected}>${escapeHtml(displayName)} (${escapeHtml(url)})</option>`;
                     }
                 } else if (defaultRegistryUrl) {
                     // 如果不存在但有值，显示 default 作为第一项
-                    defaultRegistrySelect.innerHTML += `<option value="" selected>default (${defaultRegistryUrl})</option>`;
+                    defaultRegistrySelect.innerHTML += `<option value="" selected>default (${escapeHtml(defaultRegistryUrl)})</option>`;
                     for (const [name, url] of otherRegistries) {
                         const displayName = name === '-' ? '(未命名)' : name;
-                        defaultRegistrySelect.innerHTML += `<option value="${name}">${displayName} (${url})</option>`;
+                        defaultRegistrySelect.innerHTML += `<option value="${escapeHtml(name)}">${escapeHtml(displayName)} (${escapeHtml(url)})</option>`;
                     }
                 } else {
                     // 没有配置 default
                     for (const [name, url] of otherRegistries) {
                         const displayName = name === '-' ? '(未命名)' : name;
-                        defaultRegistrySelect.innerHTML += `<option value="${name}">${displayName} (${url})</option>`;
+                        defaultRegistrySelect.innerHTML += `<option value="${escapeHtml(name)}">${escapeHtml(displayName)} (${escapeHtml(url)})</option>`;
                     }
                 }
 
@@ -1961,8 +2351,371 @@
             }
         }
 
+        // ==================== 通用格式化 ====================
+        function formatBytes(bytes) {
+            const n = Number(bytes) || 0;
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+            if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+            return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+        }
+
+        function formatRate(bytesPerSec) {
+            const n = Math.round(Number(bytesPerSec) || 0);
+            if (n < 1024) return n + ' B/s';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB/s';
+            if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB/s';
+            return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB/s';
+        }
+
+        function formatDuration(seconds) {
+            const s = Number(seconds) || 0;
+            if (s < 1) return Math.round(s * 1000) + ' ms';
+            if (s < 60) return s.toFixed(1) + ' s';
+            const m = Math.floor(s / 60);
+            const rest = Math.round(s % 60);
+            if (m < 60) return m + 'm ' + rest + 's';
+            return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+        }
+
+        function formatUptimeShort(seconds) {
+            const s = Math.max(0, Math.floor(Number(seconds) || 0));
+            const d = Math.floor(s / 86400);
+            const h = Math.floor((s % 86400) / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            let out = '';
+            if (d > 0) out += d + 'd ';
+            if (h > 0 || d > 0) out += h + 'h ';
+            return out + m + 'm';
+        }
+
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        // 摘要类引用太长，只显示前 12 位
+        function shortRef(ref) {
+            if (!ref) return '';
+            const m = /^(sha256|sha512):([0-9a-f]+)$/i.exec(ref);
+            return m ? m[1] + ':' + m[2].slice(0, 12) + '…' : ref;
+        }
+
+        // ==================== 实时监控 ====================
+        const LiveState = {
+            samples: [],
+            maxSamples: 60,
+        };
+
+        function liveKindLabel(kind) {
+            const map = {
+                api: 'kindApi',
+                manifest: 'kindManifest',
+                blob: 'kindBlob',
+                upload: 'kindUpload',
+                token: 'kindToken',
+                taglist: 'kindTaglist',
+            };
+            return I18n.t(map[kind] || 'kindOther');
+        }
+
+        function liveCacheTag(state) {
+            if (!state) return '';
+            if (state === 'HIT') return '<span class="tag hit">HIT</span>';
+            if (state === 'MISS') return '<span class="tag miss">MISS</span>';
+            return '<span class="tag">' + escapeHtml(state) + '</span>';
+        }
+
+        function liveClientCell(task) {
+            return `
+                <div class="live-task-client">
+                    <span class="mono">${escapeHtml(task.clientIp || '-')}</span>
+                    <small>${escapeHtml(task.clientType || 'unknown')}</small>
+                </div>`;
+        }
+
+        function liveActionCell(task) {
+            const ref = shortRef(task.reference);
+            return `
+                <span class="tag ${task.kind === 'blob' ? 'kind-blob' : ''}">${escapeHtml(liveKindLabel(task.kind))}</span>
+                ${ref ? `<div class="mono dim" style="margin-top:3px;">${escapeHtml(ref)}</div>` : ''}`;
+        }
+
+        function liveProgressCell(task) {
+            if (task.total > 0) {
+                const pct = Math.max(0, Math.min(100, Math.round((task.progress || 0) * 100)));
+                const cls = task.cache === 'HIT' ? 'progress-fill cached' : 'progress-fill';
+                return `
+                    <div class="progress-track"><div class="${cls}" style="width:${pct}%"></div></div>
+                    <div class="progress-label">${pct}% · ${formatBytes(task.sent)} / ${formatBytes(task.total)}</div>`;
+            }
+            return `<div class="progress-label">${formatBytes(task.sent)} · ${I18n.t('liveUnknownSize')}</div>`;
+        }
+
+        function liveActiveTable(tasks) {
+            if (!tasks.length) {
+                return `<div class="live-empty">${I18n.t('liveNoActive')}</div>`;
+            }
+            return `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${I18n.t('liveTaskClient')}</th>
+                            <th>${I18n.t('liveTaskImage')}</th>
+                            <th>${I18n.t('liveTaskAction')}</th>
+                            <th>${I18n.t('liveTaskProgress')}</th>
+                            <th>${I18n.t('liveTaskSpeed')}</th>
+                            <th>${I18n.t('liveTaskElapsed')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tasks.map(task => `
+                            <tr>
+                                <td>${liveClientCell(task)}</td>
+                                <td>${task.image ? `<code>${escapeHtml(task.image)}</code>` : '<span class="dim">-</span>'}</td>
+                                <td>${liveActionCell(task)}</td>
+                                <td>${liveProgressCell(task)}</td>
+                                <td>${formatRate(task.speed)}</td>
+                                <td>${formatDuration(task.elapsed)}</td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        function liveRecentTable(tasks) {
+            if (!tasks.length) {
+                return `<div class="live-empty">${I18n.t('liveNoRecent')}</div>`;
+            }
+            return `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${I18n.t('liveTaskClient')}</th>
+                            <th>${I18n.t('liveTaskImage')}</th>
+                            <th>${I18n.t('liveTaskAction')}</th>
+                            <th>${I18n.t('liveTaskSize')}</th>
+                            <th>${I18n.t('liveTaskSpeed')}</th>
+                            <th>${I18n.t('liveTaskElapsed')}</th>
+                            <th>${I18n.t('liveTaskStatus')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tasks.map(task => {
+                            const ok = task.status >= 200 && task.status < 400;
+                            const statusTag = task.status > 0
+                                ? `<span class="tag ${ok ? 'hit' : 'bad'}">${task.status}</span>`
+                                : `<span class="tag bad">${I18n.t('liveStatusAborted')}</span>`;
+                            return `
+                            <tr>
+                                <td>${liveClientCell(task)}</td>
+                                <td>${task.image ? `<code>${escapeHtml(task.image)}</code>` : '<span class="dim">-</span>'}</td>
+                                <td>${liveActionCell(task)}</td>
+                                <td>${formatBytes(task.sent)}</td>
+                                <td>${task.speed > 0 ? formatRate(task.speed) : '<span class="dim">-</span>'}</td>
+                                <td>${formatDuration(task.elapsed)}</td>
+                                <td>${statusTag} ${liveCacheTag(task.cache)}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        function liveAggTable(rows, withType) {
+            if (!rows || !rows.length) {
+                return `<div class="live-empty">${I18n.t('noData')}</div>`;
+            }
+            return `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${withType ? I18n.t('liveTaskClient') : I18n.t('liveTaskImage')}</th>
+                            <th>${I18n.t('liveActiveCount')}</th>
+                            <th>${I18n.t('requestCount')}</th>
+                            <th>${I18n.t('traffic')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(row => `
+                            <tr>
+                                <td>
+                                    <code>${escapeHtml(row.key)}</code>
+                                    ${withType && row.type ? `<small class="dim"> ${escapeHtml(row.type)}</small>` : ''}
+                                    ${row.active > 0 ? ` <span class="tag running">${I18n.t('liveStatusRunning')}</span>` : ''}
+                                </td>
+                                <td>${row.active > 0 ? `<strong>${row.active}</strong>` : '<span class="dim">0</span>'}</td>
+                                <td>${Number(row.requests || 0).toLocaleString()}</td>
+                                <td>${formatBytes(row.bytes)}</td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        function drawLiveChart() {
+            const canvas = document.getElementById('live-chart');
+            if (!canvas) return;
+
+            const samples = LiveState.samples;
+            const dpr = window.devicePixelRatio || 1;
+            const cssW = canvas.clientWidth || 600;
+            const cssH = canvas.clientHeight || 120;
+            if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+                canvas.width = Math.round(cssW * dpr);
+                canvas.height = Math.round(cssH * dpr);
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, cssW, cssH);
+
+            const styles = getComputedStyle(document.documentElement);
+            const cssVar = (name, fallback) => (styles.getPropertyValue(name) || '').trim() || fallback;
+            const gridColor = cssVar('--card-border', '#e2e8f0');
+            const mutedColor = cssVar('--foreground-muted', '#64748b');
+            const series = [
+                { key: 'rx', color: cssVar('--warning', '#f59e0b') },
+                { key: 'tx', color: cssVar('--primary', '#10b981') },
+            ];
+
+            const padTop = 10;
+            const padBottom = 6;
+            const plotH = Math.max(10, cssH - padTop - padBottom);
+            const plotW = cssW;
+            const maxVal = Math.max(1024, ...samples.map(s => Math.max(s.tx || 0, s.rx || 0)));
+
+            // 横向网格 + 纵轴量程
+            ctx.font = '10px Inter, sans-serif';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 2; i++) {
+                const y = Math.round(padTop + (plotH / 2) * i) + 0.5;
+                ctx.strokeStyle = gridColor;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(plotW, y);
+                ctx.stroke();
+                ctx.fillStyle = mutedColor;
+                ctx.fillText(formatRate(maxVal * (1 - i / 2)), 4, i === 2 ? y - 4 : y - 4);
+            }
+
+            if (!samples.length) return;
+
+            // 采样不足一屏时先铺满宽度，攒满 60 个点后转为滚动窗口
+            const span = samples.length >= LiveState.maxSamples ? LiveState.maxSamples : samples.length;
+            const step = plotW / Math.max(1, span - 1);
+            const xOf = i => i * step;
+            const yOf = v => padTop + plotH - (Math.min(v, maxVal) / maxVal) * plotH;
+
+            series.forEach(({ key, color }) => {
+                ctx.beginPath();
+                samples.forEach((s, i) => {
+                    const x = xOf(i);
+                    const y = yOf(s[key] || 0);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.6;
+                ctx.lineJoin = 'round';
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // 面积填充
+                ctx.lineTo(xOf(samples.length - 1), padTop + plotH);
+                ctx.lineTo(xOf(0), padTop + plotH);
+                ctx.closePath();
+                ctx.globalAlpha = 0.12;
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        function renderLive(data) {
+            const rate = data.rate || { tx: 0, rx: 0 };
+            const totals = data.totals || {};
+            const active = data.activeTasks || [];
+            const recent = data.recentTasks || [];
+
+            const hitTotal = (totals.cacheHits || 0) + (totals.cacheMisses || 0);
+            const hitRate = hitTotal > 0 ? ((totals.cacheHits / hitTotal) * 100).toFixed(1) : '0.0';
+
+            document.getElementById('live-summary').innerHTML = `
+                <div class="stat-card green">
+                    <div class="stat-value">${formatRate(rate.tx)}</div>
+                    <div class="stat-label">${I18n.t('txRate')}</div>
+                </div>
+                <div class="stat-card orange">
+                    <div class="stat-value">${formatRate(rate.rx)}</div>
+                    <div class="stat-label">${I18n.t('rxRate')}</div>
+                </div>
+                <div class="stat-card blue">
+                    <div class="stat-value">${active.length}</div>
+                    <div class="stat-label">${I18n.t('liveActiveCount')}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${hitRate}%</div>
+                    <div class="stat-label">${I18n.t('liveCacheHitRate')}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatBytes(totals.tx)}</div>
+                    <div class="stat-label">${I18n.t('liveSessionTraffic')} ↑</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatBytes(totals.rx)}</div>
+                    <div class="stat-label">${I18n.t('liveSessionTraffic')} ↓</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatUptimeShort(data.uptime)}</div>
+                    <div class="stat-label">${I18n.t('uptime')}</div>
+                </div>
+            `;
+
+            // 速率曲线：每次快照追加一个采样点
+            LiveState.samples.push({ tx: rate.tx || 0, rx: rate.rx || 0 });
+            if (LiveState.samples.length > LiveState.maxSamples) {
+                LiveState.samples.shift();
+            }
+            drawLiveChart();
+
+            const pulse = document.getElementById('live-pulse');
+            const pulseText = document.getElementById('live-pulse-text');
+            if (pulse) pulse.classList.toggle('idle', active.length === 0);
+            if (pulseText) pulseText.textContent = active.length === 0 ? I18n.t('liveIdle') : I18n.t('livePolling');
+
+            document.getElementById('live-active').innerHTML = liveActiveTable(active);
+            document.getElementById('live-active-badge').textContent = active.length;
+            document.getElementById('live-recent').innerHTML = liveRecentTable(recent);
+            document.getElementById('live-clients').innerHTML = liveAggTable(data.clientIps, true);
+            document.getElementById('live-images').innerHTML = liveAggTable(data.images, false);
+        }
+
+        // 轮询期间上一次请求未返回时跳过本次，避免慢网络下请求堆积、
+        // 响应乱序把旧快照覆盖到新数据上。
+        let liveFetching = false;
+        async function loadLive() {
+            if (document.hidden || liveFetching) return;
+            liveFetching = true;
+            try {
+                const response = await fetch('/admin/api/live', {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+                renderLive(await response.json());
+            } catch (error) {
+                console.error(I18n.t('liveLoadFailed') + ':', error);
+            } finally {
+                liveFetching = false;
+            }
+        }
+
         // 加载统计
+        let statsFetching = false;
         async function loadStats() {
+            if (statsFetching) return;
+            statsFetching = true;
             try {
                 // 请求统计
                 const reqResponse = await fetch('/admin/api/stats', {
@@ -1998,22 +2751,11 @@
                 const cacheStats = await cacheResponse.json();
 
                 // 服务状态：运行时间 + 请求总数 + 活跃连接 + 速率 + 流量
+                // formatBytes / formatRate 使用文件顶部的全局实现
                 const bytesSent = reqStats.bytesSent || 0;
                 const bytesReceived = reqStats.bytesReceived || 0;
                 const bytesRate = reqStats.bytesRate || 0;
                 const activeConns = reqStats.activeConns || 0;
-                const formatBytes = (bytes) => {
-                    if (bytes < 1024) return bytes + ' B';
-                    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-                    if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-                    return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GB';
-                };
-                const formatRate = (bytesPerSec) => {
-                    if (bytesPerSec < 1024) return bytesPerSec + ' B/s';
-                    if (bytesPerSec < 1024 * 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
-                    if (bytesPerSec < 1024 * 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(1) + ' MB/s';
-                    return (bytesPerSec / 1024 / 1024 / 1024).toFixed(2) + ' GB/s';
-                };
 
                 document.getElementById('request-stats').innerHTML = `
                     <div class="stat-card">
@@ -2096,7 +2838,7 @@
                             <tbody>
                                 ${sortedClients.map(([name, stats]) => `
                                     <tr>
-                                        <td><strong>${name}</strong></td>
+                                        <td><strong>${escapeHtml(name)}</strong></td>
                                         <td>${(stats.requests || 0).toLocaleString()}</td>
                                         <td>${formatBytes(stats.bytes || 0)}</td>
                                     </tr>
@@ -2123,7 +2865,7 @@
                             <tbody>
                                 ${sortedUpstreams.map(([host, count]) => `
                                     <tr>
-                                        <td><strong>${host}</strong></td>
+                                        <td><strong>${escapeHtml(host)}</strong></td>
                                         <td>${count.toLocaleString()}</td>
                                     </tr>
                                 `).join('')}
@@ -2149,7 +2891,7 @@
                             <tbody>
                                 ${sortedImages.map(([name, count]) => `
                                     <tr>
-                                        <td><code>${name}</code></td>
+                                        <td><code>${escapeHtml(name)}</code></td>
                                         <td>${count.toLocaleString()}</td>
                                     </tr>
                                 `).join('')}
@@ -2176,7 +2918,7 @@
                             <tbody>
                                 ${sortedClientIPs.map(([ip, stats]) => `
                                     <tr>
-                                        <td><code>${ip}</code></td>
+                                        <td><code>${escapeHtml(ip)}</code></td>
                                         <td>${(stats.requests || 0).toLocaleString()}</td>
                                         <td>${formatBytes(stats.bytes || 0)}</td>
                                     </tr>
@@ -2229,7 +2971,9 @@
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            toast.innerHTML = message.replace(/\n/g, '<br>');
+            // 用 textContent 而不是 innerHTML：toast 文案里会拼服务端返回的字符串，
+            // 走 innerHTML 就是一个 XSS 注入口。换行交给 .toast 的 white-space: pre-line。
+            toast.textContent = message;
 
             document.body.appendChild(toast);
 
@@ -2265,11 +3009,11 @@
                     updateInfoDiv.innerHTML = `
                         <div class="stats-grid" style="margin-bottom: 0;">
                             <div class="stat-card">
-                                <div class="stat-value">${info.currentVersion}</div>
+                                <div class="stat-value">${escapeHtml(info.currentVersion)}</div>
                                 <div class="stat-label">${I18n.t('currentVersion')}</div>
                             </div>
                             <div class="stat-card green">
-                                <div class="stat-value">${info.latestVersion}</div>
+                                <div class="stat-value">${escapeHtml(info.latestVersion)}</div>
                                 <div class="stat-label">${I18n.t('latestVersion')}</div>
                             </div>
                         </div>
@@ -2279,7 +3023,7 @@
                     updateInfoDiv.innerHTML = `
                         <div class="stats-grid" style="margin-bottom: 0;">
                             <div class="stat-card green">
-                                <div class="stat-value">${info.currentVersion}</div>
+                                <div class="stat-value">${escapeHtml(info.currentVersion)}</div>
                                 <div class="stat-label">${I18n.t('currentVersion')} (${I18n.t('upToDate')})</div>
                             </div>
                         </div>
@@ -2288,7 +3032,7 @@
                 }
             } catch (error) {
                 document.getElementById('update-info').innerHTML = `
-                    <div style="color: var(--danger);">${I18n.t('checkUpdateFailed')}: ${error.message}</div>
+                    <div style="color: var(--danger);">${I18n.t('checkUpdateFailed')}: ${escapeHtml(error.message)}</div>
                 `;
             }
         }
@@ -2301,7 +3045,7 @@
             updateInfoDiv.innerHTML = `
                 <div class="warning-box" style="margin-top: 0; background: var(--success-light); border-color: var(--success);">
                     <h3 style="color: var(--success);">✓ ${I18n.t('updateSuccess')}</h3>
-                    <p style="margin-top: 8px;">${I18n.t('newVersion')} <strong>${newVersion}</strong> ${I18n.t('downloadedRestartNeeded')}</p>
+                    <p style="margin-top: 8px;">${I18n.t('newVersion')} <strong>${escapeHtml(newVersion)}</strong> ${I18n.t('downloadedRestartNeeded')}</p>
                 </div>
             `;
             updateActionsDiv.style.display = 'none';

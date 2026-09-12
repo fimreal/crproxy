@@ -114,17 +114,12 @@ func main() {
 			slog.Error("Failed to load registry map", "error", err)
 			os.Exit(1)
 		}
-		initialConfig.RegistryMap = registryMap
 		// 命令行指定的 defaultRegistry 优先
-		if defaultRegistry != "" {
-			initialConfig.RegistryMap["default"] = defaultRegistry
-		}
+		initialConfig.RegistryMap = effectiveRegistryMap(registryMap, defaultRegistry)
 		configManager.UpdateConfig(initialConfig)
 	} else {
 		// 配置文件存在，使用配置文件的值，但命令行参数优先
-		if defaultRegistry != "" {
-			loadedConfig.RegistryMap["default"] = defaultRegistry
-		}
+		loadedConfig.RegistryMap = effectiveRegistryMap(loadedConfig.RegistryMap, defaultRegistry)
 		if DomainSuffix != "" {
 			loadedConfig.DomainSuffix = DomainSuffix
 		}

@@ -31,11 +31,27 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		// 只统计代理请求（/v2/ 和 /token/ 路径）
 		isProxyRequest := strings.HasPrefix(path, "/v2/") || strings.HasPrefix(path, "/token/")
 
-		// 增加活跃连接数（只统计代理请求）
-		if statsCollector != nil && isProxyRequest && !shouldSkip {
+		// 登记实时任务并统计活跃连接（只统计代理请求）
+		track := statsCollector != nil && isProxyRequest && !shouldSkip
+		if track {
+			live.Begin(c)
 			statsCollector.IncrementActiveConns()
-			defer statsCollector.DecrementActiveConns()
 		}
+
+		// 清理必须放在 defer 里：下游 handler 若 panic，c.Next() 之后的语句
+		// 不会执行（panic 由更外层的 gin.Recovery 兜住），不 defer 的话活跃
+		// 连接数会只增不减，实时任务也会永久滞留在 active 表中。
+		// live.Finish 是幂等的，正常路径先调用，defer 只做兜底。
+		cleaned := false
+		cleanup := func() {
+			if cleaned || !track {
+				return
+			}
+			cleaned = true
+			statsCollector.DecrementActiveConns()
+			live.Finish(c, c.Writer.Status())
+		}
+		defer cleanup()
 
 		// 处理请求
 		c.Next()
@@ -48,12 +64,20 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		size := c.Writer.Size()
 
 		// 收集统计数据（所有代理请求，不管状态码）
-		if statsCollector != nil && isProxyRequest {
+		if track {
+			// 先结算实时任务，再从上下文取回本次传输的实测字节数
+			cleanup()
+			task := liveTaskOf(c)
+			cacheStatus := cacheStateOf(c)
+			if task != nil && task.size() > 0 {
+				size = int(task.size())
+			}
+
 			statsCollector.IncrementRequests()
 
 			// 缓存统计（只统计成功的请求）
 			if status >= 200 && status < 400 {
-				switch c.Writer.Header().Get("X-Cache") {
+				switch cacheStatus {
 				case "HIT":
 					statsCollector.IncrementCacheHits()
 				case "MISS":
@@ -80,11 +104,13 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 
 			// 流量统计（成功的请求）
 			if status >= 200 && status < 400 && size > 0 {
-				statsCollector.AddBytesWithRate(size)
+				statsCollector.AddBytesSent(size)
 
-				// 接收流量统计：缓存命中时数据来自本地，不计入接收流量
-				cacheStatus := c.Writer.Header().Get("X-Cache")
-				if cacheStatus != "HIT" {
+				// 接收流量统计：优先用真正从上游读到的字节数，
+				// 缓存命中的请求读到的上游字节为 0，天然不会计入。
+				if recv := taskRecvBytes(task); recv > 0 {
+					statsCollector.AddBytesReceived(int(recv))
+				} else if cacheStatus != "HIT" {
 					statsCollector.AddBytesReceived(size)
 				}
 
@@ -97,10 +123,7 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 		// 记录访问日志
 		latency := time.Since(start)
 		requestID, _ := c.Get("requestID")
-		cacheStatus := c.Writer.Header().Get("X-Cache")
-		if cacheStatus == "" {
-			cacheStatus = "BYPASS"
-		}
+		cacheStatus := cacheStateOf(c)
 
 		slog.Info("request",
 			"request_id", requestID,
@@ -114,4 +137,12 @@ func accessLogMiddleware(statsCollector *StatsCollector) gin.HandlerFunc {
 			"cache", cacheStatus,
 		)
 	}
+}
+
+// taskRecvBytes 安全地读取任务的上游接收字节数。
+func taskRecvBytes(task *liveTask) int64 {
+	if task == nil {
+		return 0
+	}
+	return task.recvBytes()
 }

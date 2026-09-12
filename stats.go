@@ -22,21 +22,18 @@ type ClientStats struct {
 
 // StatsCollector 统计收集器
 type StatsCollector struct {
-	totalRequests   int64
-	cacheHits       int64
-	cacheMisses     int64
-	startTime       time.Time
-	clients         sync.Map // map[string]*ClientStats - client type -> stats
-	upstreams       sync.Map // map[string]int64 - upstream host -> count
-	images          sync.Map // map[string]int64 - image name -> count
-	clientIPs       sync.Map // map[string]*ClientStats - client IP -> stats
-	bytesSent       int64    // 发送给客户端的流量
-	bytesReceived   int64    // 从上游仓库接收的流量
-	activeConns     int64    // 当前活跃连接数
-	bytesRateWindow int64    // 当前时间窗口内传输的字节数
-	rateWindowStart int64    // 当前时间窗口开始时间（unix nano）
-	rateMutex       sync.Mutex
-	statsDir        string
+	totalRequests int64
+	cacheHits     int64
+	cacheMisses   int64
+	startTime     time.Time
+	clients       sync.Map // map[string]*ClientStats - client type -> stats
+	upstreams     sync.Map // map[string]int64 - upstream host -> count
+	images        sync.Map // map[string]int64 - image name -> count
+	clientIPs     sync.Map // map[string]*ClientStats - client IP -> stats
+	bytesSent     int64    // 发送给客户端的流量
+	bytesReceived int64    // 从上游仓库接收的流量
+	activeConns   int64    // 当前活跃连接数
+	statsDir      string
 }
 
 // statsFileName 统计文件名
@@ -203,16 +200,16 @@ func (sc *StatsCollector) SaveToFile() error {
 	})
 
 	saved := struct {
-		TotalRequests int64                `json:"totalRequests"`
-		CacheHits     int64                `json:"cacheHits"`
-		CacheMisses   int64                `json:"cacheMisses"`
+		TotalRequests int64                  `json:"totalRequests"`
+		CacheHits     int64                  `json:"cacheHits"`
+		CacheMisses   int64                  `json:"cacheMisses"`
 		Clients       map[string]ClientStats `json:"clients"`
-		Upstreams     map[string]int64     `json:"upstreams"`
-		Images        map[string]int64     `json:"images"`
+		Upstreams     map[string]int64       `json:"upstreams"`
+		Images        map[string]int64       `json:"images"`
 		ClientIPs     map[string]ClientStats `json:"clientIPs"`
-		BytesSent     int64                `json:"bytesSent"`
-		BytesReceived int64                `json:"bytesReceived"`
-		SavedAt       string               `json:"savedAt"`
+		BytesSent     int64                  `json:"bytesSent"`
+		BytesReceived int64                  `json:"bytesReceived"`
+		SavedAt       string                 `json:"savedAt"`
 	}{
 		TotalRequests: atomic.LoadInt64(&sc.totalRequests),
 		CacheHits:     atomic.LoadInt64(&sc.cacheHits),
@@ -426,26 +423,14 @@ func (sc *StatsCollector) DecrementActiveConns() {
 	atomic.AddInt64(&sc.activeConns, -1)
 }
 
-const rateWindowNano = int64(time.Second)
-
-// AddBytesWithRate 增加发送字节数并更新速率统计
-func (sc *StatsCollector) AddBytesWithRate(bytes int) {
-	atomic.AddInt64(&sc.bytesSent, int64(bytes))
-
-	now := time.Now().UnixNano()
-
-	sc.rateMutex.Lock()
-	windowStart := sc.rateWindowStart
-
-	if windowStart == 0 || now-windowStart > rateWindowNano {
-		sc.rateWindowStart = now
-		sc.bytesRateWindow = int64(bytes)
-		sc.rateMutex.Unlock()
+// AddBytesSent 累计发送给客户端的字节数。
+// 瞬时速率不再在这里维护——旧的单桶 1 秒窗口在长下载场景下几乎恒为 0，
+// 现在统一由 liveRate 滑动窗口统计（见 live.go）。
+func (sc *StatsCollector) AddBytesSent(bytes int) {
+	if bytes <= 0 {
 		return
 	}
-
-	sc.bytesRateWindow += int64(bytes)
-	sc.rateMutex.Unlock()
+	atomic.AddInt64(&sc.bytesSent, int64(bytes))
 }
 
 // GetActiveConns 获取当前活跃连接数
@@ -453,25 +438,10 @@ func (sc *StatsCollector) GetActiveConns() int64 {
 	return atomic.LoadInt64(&sc.activeConns)
 }
 
-// GetBytesRate 获取当前传输速率（字节/秒）
+// GetBytesRate 获取当前上行速率（字节/秒，滑动窗口平均值）
 func (sc *StatsCollector) GetBytesRate() int64 {
-	now := time.Now().UnixNano()
-
-	sc.rateMutex.Lock()
-	windowStart := sc.rateWindowStart
-	bytesInWindow := sc.bytesRateWindow
-	sc.rateMutex.Unlock()
-
-	if windowStart == 0 {
-		return 0
-	}
-
-	elapsed := now - windowStart
-	if elapsed <= 0 || elapsed > rateWindowNano {
-		return 0
-	}
-
-	return bytesInWindow * int64(time.Second) / elapsed
+	tx, _ := liveRate.rates()
+	return int64(tx)
 }
 
 // GetStats 获取统计数据
@@ -514,6 +484,8 @@ func (sc *StatsCollector) GetStats() map[string]any {
 		return true
 	})
 
+	txRate, rxRate := liveRate.rates()
+
 	return map[string]any{
 		"totalRequests": atomic.LoadInt64(&sc.totalRequests),
 		"cacheHits":     atomic.LoadInt64(&sc.cacheHits),
@@ -526,6 +498,8 @@ func (sc *StatsCollector) GetStats() map[string]any {
 		"bytesSent":     atomic.LoadInt64(&sc.bytesSent),
 		"bytesReceived": atomic.LoadInt64(&sc.bytesReceived),
 		"activeConns":   atomic.LoadInt64(&sc.activeConns),
-		"bytesRate":     sc.GetBytesRate(),
+		"bytesRate":     txRate,
+		"bytesRateRx":   rxRate,
+		"rateWindow":    liveRate.windowSeconds(),
 	}
 }

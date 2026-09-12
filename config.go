@@ -37,6 +37,21 @@ func SetRegistryMap(m map[string]string) {
 	registryMap.Store(m)
 }
 
+// effectiveRegistryMap 返回注入了 --default-registry 覆盖的 registry map 副本。
+// defaultRegistry 为空时原样返回入参；返回的始终是新副本，调用方后续修改
+// 不会反向影响传入的 map。
+func effectiveRegistryMap(in map[string]string, defaultRegistry string) map[string]string {
+	if defaultRegistry == "" || len(in) == 0 {
+		return in
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	out["default"] = defaultRegistry
+	return out
+}
+
 // Config 动态配置结构
 type Config struct {
 	RegistryMap   map[string]string `json:"registryMap"`

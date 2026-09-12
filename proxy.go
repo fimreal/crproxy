@@ -175,6 +175,10 @@ func replaceRealm(header, newRealm string) string {
 
 // forward handles proxy requests
 func forward(c *gin.Context) {
+	// 让实时监控在字节流经时就能记账（lite 构建下是空操作）。
+	// 必须放在任何写响应之前，缓存命中路径同样需要覆盖。
+	metricAttachWriter(c)
+
 	// 检查缓存（仅对 GET 请求）
 	if c.Request.Method == "GET" && CacheDir != "" {
 		if readFromCache(c) {
@@ -342,6 +346,9 @@ func forward(c *gin.Context) {
 			if CacheDir != "" {
 				writeToCache(resp)
 			}
+
+			// 实时统计下行流量：包装在最外层，统计的是真正从上游读到的字节
+			metricWrapUpstream(c, resp)
 
 			return nil
 		},
