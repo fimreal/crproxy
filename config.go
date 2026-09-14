@@ -63,6 +63,19 @@ type Config struct {
 	AdminPassword string            `json:"adminPassword"`
 }
 
+// effectiveListen 决定最终监听地址：命令行显式指定 > 配置文件 > 命令行默认值。
+// cliExplicit 表示用户是否真的在命令行上写过 -listen；没有它就无法区分
+// 「用户就想监听 :5000」和「用户根本没写这个参数」，后者必须让配置文件说了算。
+func effectiveListen(cfgListen, cliListen string, cliExplicit bool) string {
+	if cliExplicit {
+		return cliListen
+	}
+	if cfgListen != "" {
+		return cfgListen
+	}
+	return cliListen
+}
+
 // ConfigManager 配置管理器（线程安全）
 type ConfigManager struct {
 	mu       sync.RWMutex
@@ -167,6 +180,17 @@ func (cm *ConfigManager) saveToFile() error {
 	}
 
 	return os.Rename(tmpFile, cm.filePath)
+}
+
+// applyRuntimeConfig 把「可以热更新」的字段应用到运行时。
+// registryMap 为空时保持原样：宁可留着旧映射，也不要把代理打瞎（配置文件被清空时）。
+// cacheDir / statsDir / listen 无法热更新（目录已持有、监听已建立），改了必须重启，此处不动。
+func applyRuntimeConfig(cfg Config) {
+	if len(cfg.RegistryMap) > 0 {
+		SetRegistryMap(cfg.RegistryMap)
+	}
+	DomainSuffix = cfg.DomainSuffix
+	setLogLevel(cfg.LogLevel)
 }
 
 // loadRegistryMap 从文件或URL加载 RegistryMap

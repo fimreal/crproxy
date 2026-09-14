@@ -96,9 +96,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 			}
 
 			// 应用配置（实时生效）
-			SetRegistryMap(newConfig.RegistryMap)
-			DomainSuffix = newConfig.DomainSuffix
-			setLogLevel(newConfig.LogLevel)
+			applyRuntimeConfig(newConfig)
 
 			slog.Info("config updated", "client_ip", c.ClientIP())
 			c.JSON(http.StatusOK, gin.H{"message": "Configuration updated successfully"})
@@ -369,9 +367,7 @@ func setupAdminRoutes(r *gin.Engine, authManager *AuthManager, configManager *Co
 
 			// 应用配置
 			config := configManager.GetConfig()
-			SetRegistryMap(config.RegistryMap)
-			DomainSuffix = config.DomainSuffix
-			setLogLevel(config.LogLevel)
+			applyRuntimeConfig(config)
 
 			slog.Info("config reloaded", "client_ip", c.ClientIP())
 			c.JSON(http.StatusOK, gin.H{

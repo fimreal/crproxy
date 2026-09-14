@@ -58,6 +58,12 @@ func main() {
 	flag.BoolVar(&doUpdate, "update", false, "update to latest version from GitHub releases")
 	flag.Parse()
 
+	// 记录用户显式写了哪些参数：只有显式指定的命令行参数才能盖过配置文件。
+	// 拿「值 != 默认值」判断是不行的（例如 listen != ":5000"），它区分不了
+	// 「用户就想监听 :5000」和「用户压根没写这个参数」。
+	flagExplicit := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { flagExplicit[f.Name] = true })
+
 	// 初始化日志
 	initLogger()
 	setLogLevel(logLevelStr)
@@ -108,46 +114,67 @@ func main() {
 		Listen:       listen,
 	}
 
-	// 如果配置文件为空，使用命令行参数初始化
-	loadedConfig := configManager.GetConfig()
-	if len(loadedConfig.RegistryMap) == 0 {
-		// 加载RegistryMap
-		var err error
-		registryMap, err := loadRegistryMap(registryMapSource)
+	// -registry-map 指定的映射表，只在本次运行生效（见下方说明）
+	var cliRegistryMap map[string]string
+	if registryMapSource != "" {
+		rm, err := loadRegistryMap(registryMapSource)
 		if err != nil {
 			slog.Error("Failed to load registry map", "error", err)
 			os.Exit(1)
 		}
+		cliRegistryMap = rm
+	}
+
+	// 如果配置文件为空，使用命令行参数初始化
+	loadedConfig := configManager.GetConfig()
+	if len(loadedConfig.RegistryMap) == 0 {
+		// 加载RegistryMap
+		rm := cliRegistryMap
+		if rm == nil {
+			var err error
+			rm, err = loadRegistryMap("")
+			if err != nil {
+				slog.Error("Failed to load registry map", "error", err)
+				os.Exit(1)
+			}
+		}
 		// 命令行指定的 defaultRegistry 优先
-		initialConfig.RegistryMap = effectiveRegistryMap(registryMap, defaultRegistry)
+		initialConfig.RegistryMap = effectiveRegistryMap(rm, defaultRegistry)
 		configManager.UpdateConfig(initialConfig)
 	} else {
-		// 配置文件存在，使用配置文件的值，但命令行参数优先
+		// 配置文件存在，使用配置文件的值，但命令行显式参数优先
 		loadedConfig.RegistryMap = effectiveRegistryMap(loadedConfig.RegistryMap, defaultRegistry)
-		if DomainSuffix != "" {
+		if flagExplicit["domain-suffix"] {
 			loadedConfig.DomainSuffix = DomainSuffix
 		}
-		if logLevelStr != "info" {
+		if flagExplicit["log-level"] {
 			loadedConfig.LogLevel = logLevelStr
 		}
-		if CacheDir != "" {
+		if flagExplicit["cache-dir"] {
 			loadedConfig.CacheDir = CacheDir
 		}
-		if StatsDir != "" {
+		if flagExplicit["stats-dir"] {
 			loadedConfig.StatsDir = StatsDir
 		}
-		if listen != ":5000" {
-			loadedConfig.Listen = listen
-		}
+		// 注意：命令行 -listen 和 -registry-map 都故意不回写进配置文件。
+		// 否则 systemd/docker 的 ExecStart 里带一个 -listen 就会把用户文件里的
+		// 地址悄悄改掉；registryMap 主要由管理后台维护，被一次带参数的启动
+		// 覆盖掉也很难发现。两者都只在本次运行时覆盖，优先级见 effectiveListen。
 		configManager.UpdateConfig(loadedConfig)
 	}
 
 	// 应用配置
 	config := configManager.GetConfig()
+	if cliRegistryMap != nil {
+		config.RegistryMap = effectiveRegistryMap(cliRegistryMap, defaultRegistry)
+	}
 	SetRegistryMap(config.RegistryMap)
 	DomainSuffix = config.DomainSuffix
 	CacheDir = config.CacheDir
 	StatsDir = config.StatsDir
+	// 真正的监听地址在这里定下来：配置文件里的 listen 必须参与计算，
+	// 否则下面 net.Listen 用的还是命令行变量，配置文件形同虚设。
+	listen = effectiveListen(config.Listen, listen, flagExplicit["listen"])
 	setLogLevel(config.LogLevel)
 
 	debugLog("registry-map available registries", "registries", GetRegistryMap())
@@ -183,6 +210,12 @@ func main() {
 
 	// 加载持久化的统计数据
 	if StatsDir != "" {
+		// 和 cacheDir 对齐：启动时就把目录建出来，写不进去要立刻报错，
+		// 而不是等 5 分钟后第一次落盘才失败。
+		if err := os.MkdirAll(StatsDir, 0755); err != nil {
+			slog.Error("failed to create stats directory", "stats_dir", StatsDir, "error", err)
+			os.Exit(1)
+		}
 		statsCollector.SetStatsDir(StatsDir)
 		if err := statsCollector.LoadFromFile(); err != nil {
 			slog.Warn("failed to load stats from file", "error", err)
